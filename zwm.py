@@ -1,40 +1,6 @@
 #!/usr/bin/env python3
 """
-ZWM — A tabbed tiling window manager inspired by Notion WM.
-
-Features:
-  • Tiling:    Screen is divided into non-overlapping tiles; every managed
-               window is maximized to its tile.
-  • Tabbing:   Each tile may hold multiple windows shown as tabs with a
-               clickable tab bar.
-  • Static:    Tiles only change when the user explicitly splits or removes
-               a frame — no automatic rearrangement.
-  • Workspaces: 9 independent workspaces, each with its own tile tree.
-
-Keybindings (Mod4 = Super):
-  Mod4+Return        Launch terminal (xterm)
-  Mod4+h             Split active tile horizontally (left / right)
-  Mod4+v             Split active tile vertically  (top / bottom)
-  Mod4+Shift+h       Split horiz and MOVE active window to new tile
-  Mod4+Shift+v       Split vert  and MOVE active window to new tile
-  Mod4+d             Remove split — merge active tile with sibling
-  Mod4+,             Move tab back
-  Mod4+.             Move tab forward
-  Mod4+Left/Right/Up/Down   Focus adjacent tile
-  Mod4+Shift+Left/Right/Up/Down  Move window to adjacent tile
-  Mod4+1…9           Switch workspace
-  Mod4+Shift+1…9     Send active window to workspace
-  Mod4+r             Restart
-  F1                 Next tab in active tile
-  F2                 Prev tab
-  F6                 Close window
-  F7                 dmenu_run
-  F8                 thunar
-  F10                firefox
-  Mod4+q             Quit WM
-
-Mouse:
-  Click tab bar      Activate that tab
+ZWM — A tabbed tiling window manager inspired by Notion WM and TinyWM.
 """
 import signal
 import subprocess
