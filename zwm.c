@@ -134,6 +134,9 @@ static Atom a_strut, a_strut_partial, a_wm_type, a_wm_type_dock;
 /* For restart */
 static char **saved_argv;
 
+/* EWMH check window */
+static Window ewmh_check_win;
+
 /* ===== Utility: colour cache ===== */
 
 static unsigned long px(const char *hex)
@@ -392,6 +395,38 @@ static void focus_tile(Node *tile);
 static void bar_draw(void);
 static void bar_destroy(void);
 static void unmanage_window(Window wid);
+
+/* ===== EWMH support ===== */
+
+static void init_ewmh(void)
+{
+    Atom supporting = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
+
+    ewmh_check_win = XCreateSimpleWindow(dpy, root_win, 0, 0, 1, 1, 0, 0, 0);
+
+    /* Point root and check window at each other */
+    XChangeProperty(dpy, root_win, supporting, XA_WINDOW, 32,
+                    PropModeReplace, (unsigned char *)&ewmh_check_win, 1);
+    XChangeProperty(dpy, ewmh_check_win, supporting, XA_WINDOW, 32,
+                    PropModeReplace, (unsigned char *)&ewmh_check_win, 1);
+
+    /* Set WM name on both root and check window */
+    XChangeProperty(dpy, ewmh_check_win, a_net_wm_name, a_utf8, 8,
+                    PropModeReplace, (unsigned char *)"ZWM", 3);
+    XChangeProperty(dpy, root_win, a_net_wm_name, a_utf8, 8,
+                    PropModeReplace, (unsigned char *)"ZWM", 3);
+
+    /* Do NOT map — the check window must stay hidden */
+    XFlush(dpy);
+}
+
+static void cleanup_ewmh(void)
+{
+    if (ewmh_check_win != None) {
+        XDestroyWindow(dpy, ewmh_check_win);
+        ewmh_check_win = None;
+    }
+}
 
 /* ===== Frame (border) management ===== */
 
@@ -1152,6 +1187,7 @@ static void action_move_window_direction(const char *dir)
 static void action_restart(void)
 {
     bar_destroy();
+    cleanup_ewmh();
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         Node *tiles[MAX_TILES];
         int n = collect_tiles(workspaces[i].root, tiles, MAX_TILES);
@@ -1169,6 +1205,7 @@ static void action_quit(void)
 {
     running = 0;
     bar_destroy();
+    cleanup_ewmh();
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         Node *tiles[MAX_TILES];
         int n = collect_tiles(workspaces[i].root, tiles, MAX_TILES);
@@ -1441,6 +1478,9 @@ int main(int argc, char **argv)
     grab_keys();
     XSync(dpy, False);
 
+    /* EWMH */
+    init_ewmh();
+
     /* Status bar */
     if (BAR_HEIGHT > 0) bar_init();
 
@@ -1507,6 +1547,7 @@ int main(int argc, char **argv)
 
     /* Cleanup */
     bar_destroy();
+    cleanup_ewmh();
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         Node *tiles[MAX_TILES];
         int n = collect_tiles(workspaces[i].root, tiles, MAX_TILES);
