@@ -16,7 +16,7 @@ Features:
   • Static:    Tiles only change when the user explicitly splits or removes
                a frame — no automatic rearrangement.
 
-  • Bar:       Integrated status bar
+  • Bar:       Integrated status bar with amixer volume control using scroll wheel
                
   • Workspaces: 9 independent workspaces, each with its own tile tree.
 
@@ -35,6 +35,12 @@ Keybindings (Mod4 = Super):
   Mod4+d             Remove split — merge active tile with sibling
   
   F1                 Next tab in active tile
+
+  F2                 Previous tab in active tile
+
+  F3                 Prev workspace 
+  
+  F4                 Next workspace
   
   Mod4+Shift+Tab     Previous tab in active tile
   
