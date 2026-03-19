@@ -18,14 +18,19 @@ Keybindings (Mod4 = Super):
   Mod4+Shift+h       Split horiz and MOVE active window to new tile
   Mod4+Shift+v       Split vert  and MOVE active window to new tile
   Mod4+d             Remove split — merge active tile with sibling
-  F1                 Next tab in active tile
-  Mod4+Shift+Tab     Previous tab in active tile
+  Mod4+,             Move tab back
+  Mod4+.             Move tab forward
   Mod4+Left/Right/Up/Down   Focus adjacent tile
   Mod4+Shift+Left/Right/Up/Down  Move window to adjacent tile
   Mod4+1…9           Switch workspace
   Mod4+Shift+1…9     Send active window to workspace
   Mod4+r             Restart
-  F7                 Launch external program (default: dmenu_run)
+  F1                 Next tab in active tile
+  F2                 Prev tab
+  F6                 Close window
+  F7                 dmenu_run
+  F8                 thunar
+  F10                firefox
   Mod4+q             Quit WM
 
 Mouse:
@@ -512,6 +517,28 @@ class TilingWM:
 
     # ----- public actions -----
 
+    def action_move_tab_forward(self):
+        """Swap active tab with the next one."""
+        tile = self.ws.active_tile
+        if len(tile.windows) < 2:
+            return
+        i = tile.active_tab
+        j = (i + 1) % len(tile.windows)
+        tile.windows[i], tile.windows[j] = tile.windows[j], tile.windows[i]
+        tile.active_tab = j
+        self._arrange_tile(tile)
+
+    def action_move_tab_backward(self):
+        """Swap active tab with the previous one."""
+        tile = self.ws.active_tile
+        if len(tile.windows) < 2:
+            return
+        i = tile.active_tab
+        j = (i - 1) % len(tile.windows)
+        tile.windows[i], tile.windows[j] = tile.windows[j], tile.windows[i]
+        tile.active_tab = j
+        self._arrange_tile(tile)
+
     def action_split(self, orientation, move_window=False):
         """Split the active tile into two.
         If move_window is True, move the currently active window
@@ -909,14 +936,13 @@ class TilingWM:
             self.action_remove_split()
             return
 
-        # Mod4+Tab / Mod4+Shift+Tab — cycle tabs
+        # F1 / F2 — cycle tabs
         if keysym == XK.XK_F1:
-            if shifted:
-                self.action_prev_tab()
-            else:
-                self.action_next_tab()
+            self.action_next_tab()
             return
-
+        if keysym == XK.XK_F2:
+            self.action_prev_tab()
+            return
         # Arrows — focus or move
         direction_map = {
             XK.XK_Left: "left", XK.XK_Right: "right",
@@ -947,12 +973,23 @@ class TilingWM:
             self.action_quit()
             return
 
+        # Mod4+period — move tab forward
+        if keysym == XK.XK_period:
+            self.action_move_tab_forward()
+            return
+
+        # Mod4+comma — move tab backward
+        if keysym == XK.XK_comma:
+            self.action_move_tab_backward()
+            return
+
     # ----- grab keys & buttons -----
     def _grab_keys(self):
         keys = [
             "Return", "h", "v", "d", "r", "q",
             "Left", "Right", "Up", "Down",
             "1", "2", "3", "4", "5", "6", "7", "8", "9",
+            "comma", "period",
         ]
         for name in keys:
             ks = XK.string_to_keysym(name)
@@ -980,6 +1017,13 @@ class TilingWM:
                 self.root_win.grab_key(f1_kc, mod, True,
                                        X.GrabModeAsync, X.GrabModeAsync)
 
+        f2_kc = self.dpy.keysym_to_keycode(XK.string_to_keysym("F2"))
+        if f2_kc:
+            for mod in (0, X.Mod2Mask, X.LockMask, X.Mod2Mask | X.LockMask):
+                self.root_win.grab_key(f2_kc, mod, True,
+                                       X.GrabModeAsync, X.GrabModeAsync)
+
+
         f6_kc = self.dpy.keysym_to_keycode(XK.string_to_keysym("F6"))
         if f6_kc:
             for mod in (0, X.Mod2Mask, X.LockMask, X.Mod2Mask | X.LockMask):
@@ -992,17 +1036,19 @@ class TilingWM:
                 self.root_win.grab_key(f7_kc, mod, True,
                                        X.GrabModeAsync, X.GrabModeAsync)
 
+        f8_kc = self.dpy.keysym_to_keycode(XK.string_to_keysym("F8"))
+        if f8_kc:
+            for mod in (0, X.Mod2Mask, X.LockMask, X.Mod2Mask | X.LockMask):
+                self.root_win.grab_key(f8_kc, mod, True,
+                                       X.GrabModeAsync, X.GrabModeAsync)
+
         f10_kc = self.dpy.keysym_to_keycode(XK.string_to_keysym("F10"))
         if f10_kc:
             for mod in (0, X.Mod2Mask, X.LockMask, X.Mod2Mask | X.LockMask):
                 self.root_win.grab_key(f10_kc, mod, True,
                                        X.GrabModeAsync, X.GrabModeAsync)
 
-        f8_kc = self.dpy.keysym_to_keycode(XK.string_to_keysym("F8"))
-        if f8_kc:
-            for mod in (0, X.Mod2Mask, X.LockMask, X.Mod2Mask | X.LockMask):
-                self.root_win.grab_key(f8_kc, mod, True,
-                                       X.GrabModeAsync, X.GrabModeAsync)
+
 
     # ----- main loop -----
     def run(self):
