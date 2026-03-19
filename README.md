@@ -6,6 +6,7 @@ Depends:
   python-xlib
 
 Features:
+
   • Tiling:    Screen is divided into non-overlapping tiles; every managed
                window is maximized to its tile.
                
