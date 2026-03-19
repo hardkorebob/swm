@@ -1,4 +1,4 @@
-#ZWM 
+ZWM 
 
 Tabbed manual tiling window manager inspired by Notion WM by https://notionwm.net/ https://github.com/raboof/notion and TinyWM by Nick Welch http://incise.org/tinywm.html
 
