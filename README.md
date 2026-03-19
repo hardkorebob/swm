@@ -8,10 +8,13 @@ Depends:
 Features:
   • Tiling:    Screen is divided into non-overlapping tiles; every managed
                window is maximized to its tile.
+               
   • Tabbing:   Each tile may hold multiple windows shown as tabs with a
                clickable tab bar.
+               
   • Static:    Tiles only change when the user explicitly splits or removes
                a frame — no automatic rearrangement.
+               
   • Workspaces: 9 independent workspaces, each with its own tile tree.
 
 Keybindings (Mod4 = Super):
