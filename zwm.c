@@ -109,8 +109,6 @@ static int           cur_ws;
 static ManagedEntry  managed[MAX_MANAGED];
 static int           n_managed;
 
-static Window        bar_wins[MAX_SET];   /* windows with _NET_WM_STRUT */
-static int           n_bar_wins;
 static Window        tab_bars[MAX_SET];
 static int           n_tab_bars;
 static Window        frame_wins[MAX_SET];
@@ -120,8 +118,6 @@ static Window        status_bar_win;
 static long          prev_cpu_idle, prev_cpu_total;
 static double        cpu_pct;
 static double        last_bar_update;
-
-static Window        desktop_wid;
 static int           running;
 
 static ColorEntry    color_cache[MAX_COLORS];
@@ -959,40 +955,6 @@ static void spawn(const char *cmd)
     }
 }
 
-/* ===== Strut / dock detection ===== */
-
-static int has_strut(Window wid)
-{
-    Atom type; int fmt; unsigned long ni, after; unsigned char *data = NULL;
-    if (XGetWindowProperty(dpy, wid, a_strut_partial, 0, 12, False,
-            XA_CARDINAL, &type, &fmt, &ni, &after, &data) == Success && data && ni > 0) {
-        long *v = (long *)data;
-        for (unsigned long i = 0; i < ni; i++) if (v[i] > 0) { XFree(data); return 1; }
-        XFree(data);
-    } else if (data) { XFree(data); }
-    data = NULL;
-    if (XGetWindowProperty(dpy, wid, a_strut, 0, 4, False,
-            XA_CARDINAL, &type, &fmt, &ni, &after, &data) == Success && data && ni > 0) {
-        long *v = (long *)data;
-        for (unsigned long i = 0; i < ni; i++) if (v[i] > 0) { XFree(data); return 1; }
-        XFree(data);
-    } else if (data) { XFree(data); }
-    return 0;
-}
-
-static int is_dock_type(Window wid)
-{
-    Atom type; int fmt; unsigned long ni, after; unsigned char *data = NULL;
-    if (XGetWindowProperty(dpy, wid, a_wm_type, 0, 32, False,
-            XA_ATOM, &type, &fmt, &ni, &after, &data) == Success && data && ni > 0) {
-        Atom *atoms = (Atom *)data;
-        for (unsigned long i = 0; i < ni; i++)
-            if (atoms[i] == a_wm_type_dock) { XFree(data); return 1; }
-        XFree(data);
-    } else if (data) { XFree(data); }
-    return 0;
-}
-
 /* ===== Manage / unmanage ===== */
 
 static void manage_window(Window wid)
@@ -1000,16 +962,11 @@ static void manage_window(Window wid)
     if (managed_find(wid) >= 0) return;
     if (set_contains(tab_bars,  n_tab_bars,  wid)) return;
     if (set_contains(frame_wins, n_frame_wins, wid)) return;
-    if (set_contains(bar_wins,  n_bar_wins,  wid)) return;
 
     XWindowAttributes wa;
     if (!XGetWindowAttributes(dpy, wid, &wa)) return;
     if (wa.override_redirect) return;
 
-    if (has_strut(wid) || is_dock_type(wid)) {
-        set_add(bar_wins, &n_bar_wins, wid);
-        return;
-    }
 
     XSetWindowAttributes swa;
     swa.event_mask = StructureNotifyMask | PropertyChangeMask;
@@ -1044,7 +1001,6 @@ static void manage_window(Window wid)
 
 static void unmanage_window(Window wid)
 {
-    set_remove(bar_wins, &n_bar_wins, wid);
     int idx = managed_find(wid);
     if (idx < 0) return;
     int ws_idx = managed[idx].ws;
@@ -1288,23 +1244,6 @@ static void action_move_window_direction(const char *dir)
     focus_tile(dst);
 }
 
-static void action_restart(void)
-{
-    bar_destroy();
-    cleanup_ewmh();
-    for (int i = 0; i < NUM_WORKSPACES; i++) {
-        Node *tiles[MAX_TILES];
-        int n = collect_tiles(workspaces[i].root, tiles, MAX_TILES);
-        for (int j = 0; j < n; j++) {
-            destroy_tab_bar(tiles[j]);
-            destroy_frame(tiles[j]);
-        }
-    }
-    XCloseDisplay(dpy);
-    execvp(saved_argv[0], saved_argv);
-    _exit(1);
-}
-
 static void action_quit(void)
 {
     running = 0;
@@ -1461,7 +1400,6 @@ static void on_key_press(XEvent *ev)
 
     if (ks == XK_F3) { action_prev_workspace(); return; }
     if (ks == XK_F4) { action_next_workspace(); return; }
-    if (ks == XK_r)  { action_restart(); return; }
     if (ks == XK_F6) { action_close_window(); return; }
     if (ks == XK_F7) { action_spawn_cmd(F7_LAUNCHER_CMD); return; }
     if (ks == XK_Return) { action_spawn_cmd(TERMINAL_CMD); return; }
@@ -1499,7 +1437,7 @@ static void on_key_press(XEvent *ev)
 static void grab_keys(void)
 {
     KeySym mod4_keys[] = {
-        XK_Return, XK_h, XK_v, XK_d, XK_r, XK_q,
+        XK_Return, XK_h, XK_v, XK_d, XK_q,
         XK_Left, XK_Right, XK_Up, XK_Down,
         XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
         XK_comma, XK_period,
@@ -1586,7 +1524,6 @@ int main(int argc, char **argv)
         workspaces[i].active_tile = workspaces[i].root;
     }
     cur_ws = 0;
-    desktop_wid = None;
     status_bar_win = None;
     fullscreen_win = None;
     running = 1;
@@ -1622,8 +1559,7 @@ int main(int argc, char **argv)
             for (unsigned int i = 0; i < nchildren; i++) {
                 XWindowAttributes wa;
                 if (XGetWindowAttributes(dpy, children[i], &wa) &&
-                    wa.map_state == IsViewable && !wa.override_redirect &&
-                    children[i] != desktop_wid) {
+                    wa.map_state == IsViewable && !wa.override_redirect) { 
                     manage_window(children[i]);
                 }
             }
