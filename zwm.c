@@ -1,5 +1,6 @@
 /*
  * ZWM — A tabbed tiling window manager inspired by Notion and TinyWM.
+ * Single-file C port. Compile with:
  *   cc -O2 -o zwm zwm.c -lX11
  */
 
@@ -29,9 +30,10 @@
 #define WWW_CMD             "firefox"
 #define F7_LAUNCHER_CMD     "dmenu_run"
 
-#define BAR_POS_TOP         1       /* 1 = top, 0 = bottom */
+#define BAR_POS_TOP         1      /* 1 = top, 0 = bottom (status bar) */
 #define BAR_HEIGHT          24
 #define BAR_UPDATE_INTERVAL 1.0
+#define BBAR_POS_TOP        0       /* 1 = top, 0 = bottom (hex-time bar) */
 #define BOTTOM_BAR_HEIGHT   14
 
 /* Colours for bottom hex-time bar */
@@ -776,7 +778,11 @@ static void bar_destroy(void)
 
 static void bottom_bar_init(void)
 {
-    int by = sh - BOTTOM_BAR_HEIGHT;
+    int by;
+    if (BBAR_POS_TOP)
+        by = BAR_POS_TOP ? BAR_HEIGHT : 0;
+    else
+        by = BAR_POS_TOP ? sh - BOTTOM_BAR_HEIGHT : sh - BAR_HEIGHT - BOTTOM_BAR_HEIGHT;
     XSetWindowAttributes swa;
     swa.background_pixel = px(COL_BBAR_BG);
     swa.override_redirect = True;
@@ -1735,13 +1741,12 @@ int main(int argc, char **argv)
     cmap     = DefaultColormap(dpy, scr_num);
     depth    = DefaultDepth(dpy, scr_num);
 
-    /* Bar reservation */
-    if (BAR_HEIGHT > 0 && BAR_POS_TOP) {
-        tile_y_off = BAR_HEIGHT; tile_h_val = sh - BAR_HEIGHT - BOTTOM_BAR_HEIGHT;
-    } else if (BAR_HEIGHT > 0) {
-        tile_y_off = 0; tile_h_val = sh - BAR_HEIGHT - BOTTOM_BAR_HEIGHT;
-    } else {
-        tile_y_off = 0; tile_h_val = sh - BOTTOM_BAR_HEIGHT;
+    /* Bar reservation — each bar independently chooses top or bottom */
+    {
+        int top_r  = (BAR_POS_TOP  ? BAR_HEIGHT : 0) + (BBAR_POS_TOP  ? BOTTOM_BAR_HEIGHT : 0);
+        int bot_r  = (!BAR_POS_TOP ? BAR_HEIGHT : 0) + (!BBAR_POS_TOP ? BOTTOM_BAR_HEIGHT : 0);
+        tile_y_off = top_r;
+        tile_h_val = sh - top_r - bot_r;
     }
 
     /* Font */
