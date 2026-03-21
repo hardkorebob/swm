@@ -56,6 +56,9 @@
 #define COL_TAB_ACTIVE_FG   "#000000"
 #define COL_TAB_INACTIVE_FG "#AAAAAA"
 #define COL_TAB_BAR_BG      "#2B2B2B"
+/* Active tab in an unfocused tile — muted so only the focused tile pops */
+#define COL_TAB_ACTIVE_BG_DIM   "#555555"
+#define COL_TAB_ACTIVE_FG_DIM   "#CCCCCC"
 #define COL_BORDER_ACTIVE   "#696969"
 #define COL_BORDER_INACTIVE "#1E1E1E"
 #define COL_DESKTOP_BG      "#000000"
@@ -1004,8 +1007,14 @@ static void draw_tab_bar(Node *tile)
         int tab_w = w / n; if (tab_w < 1) tab_w = 1;
         for (int i = 0; i < n; i++) {
             int is_tab_act = (i == tile->tile.active_tab);
-            const char *bg = is_tab_act ? COL_TAB_ACTIVE_BG : COL_TAB_INACTIVE_BG;
-            const char *fg = is_tab_act ? COL_TAB_ACTIVE_FG : COL_TAB_INACTIVE_FG;
+            const char *bg, *fg;
+            if (is_tab_act) {
+                bg = is_active ? COL_TAB_ACTIVE_BG     : COL_TAB_ACTIVE_BG_DIM;
+                fg = is_active ? COL_TAB_ACTIVE_FG     : COL_TAB_ACTIVE_FG_DIM;
+            } else {
+                bg = COL_TAB_INACTIVE_BG;
+                fg = COL_TAB_INACTIVE_FG;
+            }
             int x0 = i * tab_w;
             int tw = (i < n - 1) ? tab_w : (w - x0);
 
