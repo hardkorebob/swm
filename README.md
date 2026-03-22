@@ -93,7 +93,6 @@ Pipe mode:
 
 ```
 echo "next-tab" | zwmctl -
-
 ```
 
 ### Dimensions
