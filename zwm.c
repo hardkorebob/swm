@@ -21,62 +21,234 @@
 #include <errno.h>
 #include <time.h>
 
-/* ===== Constants ===== */
+/* ===== Compile-time limits (not runtime-configurable) ===== */
 
-#define TAB_BAR_HEIGHT      22
-#define BORDER_WIDTH        1
-#define BORDER_GAP          2
 #define NUM_WORKSPACES      9
-#define TERMINAL_CMD        "xterm"
-#define FM_CMD              "thunar"
-#define WWW_CMD             "firefox"
-#define F7_LAUNCHER_CMD     "dmenu_run"
-
-#define CMD_SOCK_PATH       "/tmp/zwm.sock"   /* or $XDG_RUNTIME_DIR/zwm.sock */
+#define CMD_SOCK_PATH       "/tmp/zwm.sock"
 #define CMD_MAX_CLIENTS     8
 #define CMD_BUF_SIZE        512
-
-#define BAR_POS_TOP         0       /* 1 = top, 0 = bottom (status bar) */
-#define BAR_HEIGHT          24
-#define BAR_UPDATE_INTERVAL 1.0
-#define BBAR_POS_TOP        1       /* 1 = top, 0 = bottom (hex-time bar) */
-#define BOTTOM_BAR_HEIGHT   14
-
-/* Colours for bottom hex-time bar */
-#define COL_BBAR_BG         "#1E1E1E"
-#define COL_BBAR_HOUR       "#CC3300"
-#define COL_BBAR_HEX        "#00CC66"
-#define COL_BBAR_SEG        "#CCAA00"
-#define COL_BBAR_LABEL      "#FFFFFF"
-#define COL_BBAR_TRACK      "#333333"
-
-/* Colours — exact hex values from the Python version */
-#define COL_BAR_BG          "#1E1E1E"
-#define COL_BAR_FG          "#FFBF00"
-#define COL_BAR_WS_ACTIVE   "#fbe7ac"
-#define COL_BAR_WS_INACTIVE "#555555"
-#define COL_BAR_WS_OCCUPIED "#888888"
-#define COL_BAR_WS_FG_ACT   "#000000"
-#define COL_BAR_WS_FG_INACT "#AAAAAA"
-#define COL_TAB_ACTIVE_BG   "#fbe7ac"
-#define COL_TAB_INACTIVE_BG "#3C3C3C"
-#define COL_TAB_ACTIVE_FG   "#000000"
-#define COL_TAB_INACTIVE_FG "#AAAAAA"
-#define COL_TAB_BAR_BG      "#2B2B2B"
-/* Active tab in an unfocused tile — muted so only the focused tile pops */
-#define COL_TAB_ACTIVE_BG_DIM   "#555555"
-#define COL_TAB_ACTIVE_FG_DIM   "#CCCCCC"
-#define COL_BORDER_ACTIVE   "#696969"
-#define COL_BORDER_INACTIVE "#1E1E1E"
-#define COL_DESKTOP_BG      "#000000"
-
-/* Limits */
 #define MAX_WINS_PER_TILE   64
 #define MAX_TILES           256
 #define MAX_MANAGED         512
 #define MAX_SET             512
 #define MAX_COLORS          32
 #define MAX_BINDINGS        64
+
+/* ===== Runtime configuration ===== */
+
+typedef struct {
+    /* Dimensions */
+    int    tab_bar_height;
+    int    border_width;
+    int    border_gap;
+    int    statusbar_height;
+    int    statusbar_pos;
+    int    timebar_pos;
+    int    timebar_height;
+    double bar_update_interval;
+
+    /* Commands */
+    char terminal_cmd[128];
+    char fm_cmd[128];
+    char www_cmd[128];
+    char launcher_cmd[128];
+
+    /* Colors — status bar */
+    char col_statusbar_bg[8];
+    char col_statusbar_fg[8];
+    char col_statusbar_ws_active[8];
+    char col_statusbar_ws_inactive[8];
+    char col_statusbar_ws_occupied[8];
+    char col_statusbar_ws_fg_act[8];
+    char col_statusbar_ws_fg_inact[8];
+
+    /* Colors — tabs */
+    char col_tab_active_bg[8];
+    char col_tab_inactive_bg[8];
+    char col_tab_active_fg[8];
+    char col_tab_inactive_fg[8];
+    char col_tab_bar_bg[8];
+    char col_tab_active_bg_dim[8];
+    char col_tab_active_fg_dim[8];
+
+    /* Colors — borders & desktop */
+    char col_border_active[8];
+    char col_border_inactive[8];
+    char col_desktop_bg[8];
+
+    /* Colors — bottom hex-time bar */
+    char col_timebar_bg[8];
+    char col_timebar_hour[8];
+    char col_timebar_hex[8];
+    char col_timebar_seg[8];
+    char col_timebar_label[8];
+    char col_timebar_track[8];
+} Config;
+
+static Config cfg;
+
+static void cfg_defaults(void)
+{
+    cfg.tab_bar_height     = 22;
+    cfg.border_width       = 1;
+    cfg.border_gap         = 2;
+    cfg.statusbar_height         = 24;
+    cfg.statusbar_pos        = 0;
+    cfg.timebar_pos       = 1;
+    cfg.timebar_height  = 14;
+    cfg.bar_update_interval = 1.0;
+
+    strncpy(cfg.terminal_cmd, "xterm",     sizeof(cfg.terminal_cmd) - 1);
+    strncpy(cfg.fm_cmd,       "thunar",    sizeof(cfg.fm_cmd) - 1);
+    strncpy(cfg.www_cmd,      "firefox",   sizeof(cfg.www_cmd) - 1);
+    strncpy(cfg.launcher_cmd, "dmenu_run", sizeof(cfg.launcher_cmd) - 1);
+
+    strncpy(cfg.col_statusbar_bg,          "#1E1E1E", 7);
+    strncpy(cfg.col_statusbar_fg,          "#FFBF00", 7);
+    strncpy(cfg.col_statusbar_ws_active,   "#fbe7ac", 7);
+    strncpy(cfg.col_statusbar_ws_inactive, "#555555", 7);
+    strncpy(cfg.col_statusbar_ws_occupied, "#888888", 7);
+    strncpy(cfg.col_statusbar_ws_fg_act,   "#000000", 7);
+    strncpy(cfg.col_statusbar_ws_fg_inact, "#AAAAAA", 7);
+
+    strncpy(cfg.col_tab_active_bg,     "#fbe7ac", 7);
+    strncpy(cfg.col_tab_inactive_bg,   "#3C3C3C", 7);
+    strncpy(cfg.col_tab_active_fg,     "#000000", 7);
+    strncpy(cfg.col_tab_inactive_fg,   "#AAAAAA", 7);
+    strncpy(cfg.col_tab_bar_bg,        "#2B2B2B", 7);
+    strncpy(cfg.col_tab_active_bg_dim, "#555555", 7);
+    strncpy(cfg.col_tab_active_fg_dim, "#CCCCCC", 7);
+
+    strncpy(cfg.col_border_active,   "#696969", 7);
+    strncpy(cfg.col_border_inactive, "#1E1E1E", 7);
+    strncpy(cfg.col_desktop_bg,      "#000000", 7);
+
+    strncpy(cfg.col_timebar_bg,    "#1E1E1E", 7);
+    strncpy(cfg.col_timebar_hour,  "#CC3300", 7);
+    strncpy(cfg.col_timebar_hex,   "#00CC66", 7);
+    strncpy(cfg.col_timebar_seg,   "#CCAA00", 7);
+    strncpy(cfg.col_timebar_label, "#FFFFFF", 7);
+    strncpy(cfg.col_timebar_track, "#333333", 7);
+}
+
+/* ===== Config file parser ===== */
+
+/* Resolve config file path.  Returns 1 if found, 0 if not. */
+static int cfg_resolve_path(char *out, int len)
+{
+    const char *env;
+    env = getenv("XDG_CONFIG_HOME");
+    if (env && *env) {
+        snprintf(out, len, "%s/zwm/config", env);
+        if (access(out, R_OK) == 0) return 1;
+    }
+    const char *home = getenv("HOME");
+    if (!home) home = "/root";
+    snprintf(out, len, "%s/.config/zwm/config", home);
+    if (access(out, R_OK) == 0) return 1;
+    return 0;
+}
+
+/* Parse a single key=value pair into cfg.  Returns 1 if recognised, 0 if not. */
+static int cfg_set_kv(const char *key, const char *val)
+{
+    /* Integers */
+    if (strcmp(key, "tab_bar_height") == 0)        { cfg.tab_bar_height      = atoi(val); return 1; }
+    if (strcmp(key, "border_width") == 0)          { cfg.border_width        = atoi(val); return 1; }
+    if (strcmp(key, "border_gap") == 0)            { cfg.border_gap          = atoi(val); return 1; }
+    if (strcmp(key, "statusbar_height") == 0)      { cfg.statusbar_height    = atoi(val); return 1; }
+    if (strcmp(key, "statusbar_pos") == 0)         { cfg.statusbar_pos       = atoi(val); return 1; }
+    if (strcmp(key, "timebar_pos") == 0)           { cfg.timebar_pos         = atoi(val); return 1; }
+    if (strcmp(key, "timebar_height") == 0)        { cfg.timebar_height      = atoi(val); return 1; }
+    if (strcmp(key, "bar_update_interval") == 0)   { cfg.bar_update_interval = atof(val); return 1; }
+
+    /* Commands */
+    if (strcmp(key, "terminal") == 0)     { strncpy(cfg.terminal_cmd, val, sizeof(cfg.terminal_cmd) - 1); return 1; }
+    if (strcmp(key, "file_manager") == 0) { strncpy(cfg.fm_cmd,       val, sizeof(cfg.fm_cmd) - 1);       return 1; }
+    if (strcmp(key, "browser") == 0)      { strncpy(cfg.www_cmd,      val, sizeof(cfg.www_cmd) - 1);      return 1; }
+    if (strcmp(key, "launcher") == 0)     { strncpy(cfg.launcher_cmd, val, sizeof(cfg.launcher_cmd) - 1); return 1; }
+
+    /* Colors — validate: must start with # and be 7 chars */
+    if (val[0] != '#' || strlen(val) < 7) return 0;
+
+    if (strcmp(key, "col_statusbar_bg") == 0)            { strncpy(cfg.col_statusbar_bg,          val, 7); return 1; }
+    if (strcmp(key, "col_statusbar_fg") == 0)            { strncpy(cfg.col_statusbar_fg,          val, 7); return 1; }
+    if (strcmp(key, "col_statusbar_ws_active") == 0)     { strncpy(cfg.col_statusbar_ws_active,   val, 7); return 1; }
+    if (strcmp(key, "col_statusbar_ws_inactive") == 0)   { strncpy(cfg.col_statusbar_ws_inactive, val, 7); return 1; }
+    if (strcmp(key, "col_statusbar_ws_occupied") == 0)   { strncpy(cfg.col_statusbar_ws_occupied, val, 7); return 1; }
+    if (strcmp(key, "col_statusbar_ws_fg_act") == 0)     { strncpy(cfg.col_statusbar_ws_fg_act,   val, 7); return 1; }
+    if (strcmp(key, "col_statusbar_ws_fg_inact") == 0)   { strncpy(cfg.col_statusbar_ws_fg_inact, val, 7); return 1; }
+    if (strcmp(key, "col_tab_active_bg") == 0)           { strncpy(cfg.col_tab_active_bg,         val, 7); return 1; }
+    if (strcmp(key, "col_tab_inactive_bg") == 0)         { strncpy(cfg.col_tab_inactive_bg,       val, 7); return 1; }
+    if (strcmp(key, "col_tab_active_fg") == 0)           { strncpy(cfg.col_tab_active_fg,         val, 7); return 1; }
+    if (strcmp(key, "col_tab_inactive_fg") == 0)         { strncpy(cfg.col_tab_inactive_fg,       val, 7); return 1; }
+    if (strcmp(key, "col_tab_bar_bg") == 0)              { strncpy(cfg.col_tab_bar_bg,            val, 7); return 1; }
+    if (strcmp(key, "col_tab_active_bg_dim") == 0)       { strncpy(cfg.col_tab_active_bg_dim,     val, 7); return 1; }
+    if (strcmp(key, "col_tab_active_fg_dim") == 0)       { strncpy(cfg.col_tab_active_fg_dim,     val, 7); return 1; }
+    if (strcmp(key, "col_border_active") == 0)           { strncpy(cfg.col_border_active,         val, 7); return 1; }
+    if (strcmp(key, "col_border_inactive") == 0)         { strncpy(cfg.col_border_inactive,       val, 7); return 1; }
+    if (strcmp(key, "col_desktop_bg") == 0)              { strncpy(cfg.col_desktop_bg,            val, 7); return 1; }
+    if (strcmp(key, "col_timebar_bg") == 0)              { strncpy(cfg.col_timebar_bg,            val, 7); return 1; }
+    if (strcmp(key, "col_timebar_hour") == 0)            { strncpy(cfg.col_timebar_hour,          val, 7); return 1; }
+    if (strcmp(key, "col_timebar_hex") == 0)             { strncpy(cfg.col_timebar_hex,           val, 7); return 1; }
+    if (strcmp(key, "col_timebar_seg") == 0)             { strncpy(cfg.col_timebar_seg,           val, 7); return 1; }
+    if (strcmp(key, "col_timebar_label") == 0)           { strncpy(cfg.col_timebar_label,         val, 7); return 1; }
+    if (strcmp(key, "col_timebar_track") == 0)           { strncpy(cfg.col_timebar_track,         val, 7); return 1; }
+
+    return 0;
+}
+
+/* Parse config file.  Returns number of keys set, or -1 on open failure. */
+static int cfg_load(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+
+    char line[512];
+    int lineno = 0, count = 0;
+    while (fgets(line, sizeof(line), f)) {
+        lineno++;
+        /* Strip newline */
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+
+        /* Skip comments and blank lines */
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '#' || *p == '\0') continue;
+
+        /* Split on '=' */
+        char *eq = strchr(p, '=');
+        if (!eq) {
+            fprintf(stderr, "zwm: config:%d: missing '='\n", lineno);
+            continue;
+        }
+
+        /* Key: trim trailing whitespace */
+        char *kend = eq - 1;
+        while (kend > p && (*kend == ' ' || *kend == '\t')) kend--;
+        *(kend + 1) = '\0';
+
+        /* Value: trim leading whitespace */
+        char *val = eq + 1;
+        while (*val == ' ' || *val == '\t') val++;
+        /* Trim trailing whitespace */
+        char *vend = val + strlen(val) - 1;
+        while (vend > val && (*vend == ' ' || *vend == '\t')) *vend-- = '\0';
+
+        if (cfg_set_kv(p, val)) count++;
+    }
+    fclose(f);
+    return count;
+}
+
+/* SIGHUP handler — sets a flag checked in the event loop */
+static volatile sig_atomic_t reload_pending;
+
+static void on_sighup(int sig) { (void)sig; reload_pending = 1; }
+
+/* Forward declaration — defined after bar functions exist */
+static void cfg_apply(void);
 
 /* ===== Data structures ===== */
 
@@ -190,12 +362,12 @@ static Keybind keybinds[] = {
     { XK_F3,     0,                      ACT_PREV_WORKSPACE,    0, NULL },
     { XK_F4,     0,                      ACT_NEXT_WORKSPACE,    0, NULL },
     { XK_F6,     0,                      ACT_CLOSE_WINDOW,      0, NULL },
-    { XK_F7,     0,                      ACT_SPAWN,             0, F7_LAUNCHER_CMD },
-    { XK_F8,     0,                      ACT_SPAWN,             0, FM_CMD },
-    { XK_F9,     0,                      ACT_SPAWN,             0, WWW_CMD },
+    { XK_F7,     0,                      ACT_SPAWN,             3, NULL },  /* launcher */
+    { XK_F8,     0,                      ACT_SPAWN,             1, NULL },  /* file manager */
+    { XK_F9,     0,                      ACT_SPAWN,             2, NULL },  /* browser */
 
     /* Mod4 — plain */
-    { XK_Return, Mod4Mask,               ACT_SPAWN,             0, TERMINAL_CMD },
+    { XK_Return, Mod4Mask,               ACT_SPAWN,             0, NULL },  /* terminal */
     { XK_h,      Mod4Mask,               ACT_SPLIT,             1, NULL },  /* horizontal */
     { XK_v,      Mod4Mask,               ACT_SPLIT,             0, NULL },  /* vertical */
     { XK_d,      Mod4Mask,               ACT_REMOVE_SPLIT,      0, NULL },
@@ -369,12 +541,12 @@ static void tile_clamp_tab(Node *t)
 
 static void tile_client_area(Node *t, int *cx, int *cy, int *cw, int *ch)
 {
-    int b = BORDER_WIDTH, g = BORDER_GAP;
+    int b = cfg.border_width, g = cfg.border_gap;
     *cx = t->x + g + b;
     *cw = t->w - 2*(g+b); if (*cw < 1) *cw = 1;
-    *ch = t->h - TAB_BAR_HEIGHT - 2*(g+b); if (*ch < 1) *ch = 1;
-    if (BAR_POS_TOP)
-        *cy = t->y + TAB_BAR_HEIGHT + g + b;   /* tab bar on top, client below */
+    *ch = t->h - cfg.tab_bar_height - 2*(g+b); if (*ch < 1) *ch = 1;
+    if (cfg.statusbar_pos)
+        *cy = t->y + cfg.tab_bar_height + g + b;   /* tab bar on top, client below */
     else
         *cy = t->y + g + b;                     /* tab bar on bottom, client above */
 }
@@ -654,12 +826,12 @@ static void fullscreen_toggle(Window wid)
 
 static void ensure_frame(Node *tile)
 {
-    int g = BORDER_GAP;
+    int g = cfg.border_gap;
     int fx = tile->x + g, fy = tile->y + g;
     int fw = tile->w - 2*g; if (fw < 1) fw = 1;
     int fh = tile->h - 2*g; if (fh < 1) fh = 1;
     int is_active = (tile == ws()->active_tile);
-    const char *bg = is_active ? COL_BORDER_ACTIVE : COL_BORDER_INACTIVE;
+    const char *bg = is_active ? cfg.col_border_active : cfg.col_border_inactive;
 
     if (tile->tile.frame_win == None) {
         XSetWindowAttributes swa;
@@ -790,13 +962,13 @@ static void bar_set_volume(int delta)
 
 static void bar_init(void)
 {
-    int by = BAR_POS_TOP ? 0 : (sh - BAR_HEIGHT);
+    int by = cfg.statusbar_pos ? 0 : (sh - cfg.statusbar_height);
     XSetWindowAttributes swa;
-    swa.background_pixel = px(COL_BAR_BG);
+    swa.background_pixel = px(cfg.col_statusbar_bg);
     swa.override_redirect = True;
     swa.event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask;
     status_bar_win = XCreateWindow(dpy, root_win,
-        0, by, (unsigned)sw, BAR_HEIGHT, 0, depth, InputOutput, CopyFromParent,
+        0, by, (unsigned)sw, cfg.statusbar_height, 0, depth, InputOutput, CopyFromParent,
         CWBackPixel | CWOverrideRedirect | CWEventMask, &swa);
     XRaiseWindow(dpy, status_bar_win);
     XMapWindow(dpy, status_bar_win);
@@ -807,14 +979,14 @@ static void bar_init(void)
 static void bar_draw(void)
 {
     if (status_bar_win == None) return;
-    int w = sw, h = BAR_HEIGHT;
+    int w = sw, h = cfg.statusbar_height;
     XRaiseWindow(dpy, status_bar_win);
 
     Pixmap pm = XCreatePixmap(dpy, status_bar_win, (unsigned)w, (unsigned)h, (unsigned)depth);
 
     /* Background */
     GC gc = XCreateGC(dpy, pm, 0, NULL);
-    XSetForeground(dpy, gc, px(COL_BAR_BG));
+    XSetForeground(dpy, gc, px(cfg.col_statusbar_bg));
     XFillRectangle(dpy, pm, gc, 0, 0, (unsigned)w, (unsigned)h);
 
     int pad = 6, ws_w = 22, ws_gap = 3, text_y = h/2 + 4;
@@ -825,9 +997,9 @@ static void bar_draw(void)
         int is_cur = (i == cur_ws);
         int has_w  = ws_has_windows(&workspaces[i]);
         const char *bg_col, *fg_col;
-        if (is_cur)      { bg_col = COL_BAR_WS_ACTIVE;   fg_col = COL_BAR_WS_FG_ACT; }
-        else if (has_w)  { bg_col = COL_BAR_WS_OCCUPIED;  fg_col = COL_BAR_WS_FG_ACT; }
-        else             { bg_col = COL_BAR_WS_INACTIVE;  fg_col = COL_BAR_WS_FG_INACT; }
+        if (is_cur)      { bg_col = cfg.col_statusbar_ws_active;   fg_col = cfg.col_statusbar_ws_fg_act; }
+        else if (has_w)  { bg_col = cfg.col_statusbar_ws_occupied;  fg_col = cfg.col_statusbar_ws_fg_act; }
+        else             { bg_col = cfg.col_statusbar_ws_inactive;  fg_col = cfg.col_statusbar_ws_fg_inact; }
 
         XSetForeground(dpy, gc, px(bg_col));
         XFillRectangle(dpy, pm, gc, x, 2, (unsigned)ws_w, (unsigned)(h - 4));
@@ -859,7 +1031,7 @@ static void bar_draw(void)
 
     int text_w = (int)strlen(status) * 7;
     int tx = w - text_w - pad;
-    XSetForeground(dpy, gc, px(COL_BAR_FG));
+    XSetForeground(dpy, gc, px(cfg.col_statusbar_fg));
     XSetFont(dpy, gc, font->fid);
     XDrawString(dpy, pm, gc, tx, text_y, status, (int)strlen(status));
 
@@ -904,16 +1076,16 @@ static void bar_destroy(void)
 static void bottom_bar_init(void)
 {
     int by;
-    if (BBAR_POS_TOP)
-        by = BAR_POS_TOP ? BAR_HEIGHT : 0;
+    if (cfg.timebar_pos)
+        by = cfg.statusbar_pos ? cfg.statusbar_height : 0;
     else
-        by = BAR_POS_TOP ? sh - BOTTOM_BAR_HEIGHT : sh - BAR_HEIGHT - BOTTOM_BAR_HEIGHT;
+        by = cfg.statusbar_pos ? sh - cfg.timebar_height : sh - cfg.statusbar_height - cfg.timebar_height;
     XSetWindowAttributes swa;
-    swa.background_pixel = px(COL_BBAR_BG);
+    swa.background_pixel = px(cfg.col_timebar_bg);
     swa.override_redirect = True;
     swa.event_mask = ExposureMask;
     bottom_bar_win = XCreateWindow(dpy, root_win,
-        0, by, (unsigned)sw, BOTTOM_BAR_HEIGHT, 0, depth, InputOutput, CopyFromParent,
+        0, by, (unsigned)sw, cfg.timebar_height, 0, depth, InputOutput, CopyFromParent,
         CWBackPixel | CWOverrideRedirect | CWEventMask, &swa);
     XRaiseWindow(dpy, bottom_bar_win);
     XMapWindow(dpy, bottom_bar_win);
@@ -923,14 +1095,14 @@ static void bottom_bar_init(void)
 static void bottom_bar_draw(void)
 {
     if (bottom_bar_win == None) return;
-    int w = sw, h = BOTTOM_BAR_HEIGHT;
+    int w = sw, h = cfg.timebar_height;
     XRaiseWindow(dpy, bottom_bar_win);
 
     Pixmap pm = XCreatePixmap(dpy, bottom_bar_win, (unsigned)w, (unsigned)h, (unsigned)depth);
     GC gc = XCreateGC(dpy, pm, 0, NULL);
 
     /* Background */
-    XSetForeground(dpy, gc, px(COL_BBAR_BG));
+    XSetForeground(dpy, gc, px(cfg.col_timebar_bg));
     XFillRectangle(dpy, pm, gc, 0, 0, (unsigned)w, (unsigned)h);
 
     /* Get current time in local time */
@@ -974,20 +1146,20 @@ static void bottom_bar_draw(void)
         if (fill_w < 1) fill_w = 1;
 
         /* Track */
-        XSetForeground(dpy, gc, px(COL_BBAR_TRACK));
+        XSetForeground(dpy, gc, px(cfg.col_timebar_track));
         XFillRectangle(dpy, pm, gc, fill_x, bar_y, (unsigned)fill_w, (unsigned)bar_h);
 
         /* Fill */
         int fw = (int)(fill_w * hour_pct);
         if (fw > 0) {
-            XSetForeground(dpy, gc, px(COL_BBAR_HOUR));
+            XSetForeground(dpy, gc, px(cfg.col_timebar_hour));
             XFillRectangle(dpy, pm, gc, fill_x, bar_y, (unsigned)fw, (unsigned)bar_h);
         }
 
         /* Label */
         char lbl[4];
         snprintf(lbl, sizeof(lbl), "%d", hours12);
-        XSetForeground(dpy, gc, px(COL_BBAR_LABEL));
+        XSetForeground(dpy, gc, px(cfg.col_timebar_label));
         XSetFont(dpy, gc, font->fid);
         XDrawString(dpy, pm, gc, x0 + 2, bar_y + bar_h - 1, lbl, (int)strlen(lbl));
     }
@@ -1000,19 +1172,19 @@ static void bottom_bar_draw(void)
         if (fill_w < 1) fill_w = 1;
 
         /* Track */
-        XSetForeground(dpy, gc, px(COL_BBAR_TRACK));
+        XSetForeground(dpy, gc, px(cfg.col_timebar_track));
         XFillRectangle(dpy, pm, gc, fill_x, bar_y, (unsigned)fill_w, (unsigned)bar_h);
 
         /* Fill */
         int fw = (int)(fill_w * hex_pct);
         if (fw > 0) {
-            XSetForeground(dpy, gc, px(COL_BBAR_HEX));
+            XSetForeground(dpy, gc, px(cfg.col_timebar_hex));
             XFillRectangle(dpy, pm, gc, fill_x, bar_y, (unsigned)fw, (unsigned)bar_h);
         }
 
         /* Label */
         char lbl[2] = { hex_chars[hex_segment], '\0' };
-        XSetForeground(dpy, gc, px(COL_BBAR_LABEL));
+        XSetForeground(dpy, gc, px(cfg.col_timebar_label));
         XSetFont(dpy, gc, font->fid);
         XDrawString(dpy, pm, gc, x0 + 2, bar_y + bar_h - 1, lbl, 1);
     }
@@ -1024,13 +1196,13 @@ static void bottom_bar_draw(void)
         if (fill_w < 1) fill_w = 1;
 
         /* Track */
-        XSetForeground(dpy, gc, px(COL_BBAR_TRACK));
+        XSetForeground(dpy, gc, px(cfg.col_timebar_track));
         XFillRectangle(dpy, pm, gc, x0 + gap, bar_y, (unsigned)fill_w, (unsigned)bar_h);
 
         /* Fill */
         int fw = (int)(fill_w * seg_pct);
         if (fw > 0) {
-            XSetForeground(dpy, gc, px(COL_BBAR_SEG));
+            XSetForeground(dpy, gc, px(cfg.col_timebar_seg));
             XFillRectangle(dpy, pm, gc, x0 + gap, bar_y, (unsigned)fw, (unsigned)bar_h);
         }
     }
@@ -1055,17 +1227,17 @@ static void bottom_bar_destroy(void)
 
 static void ensure_tab_bar(Node *tile)
 {
-    int g = BORDER_GAP, b = BORDER_WIDTH;
+    int g = cfg.border_gap, b = cfg.border_width;
     int bx = tile->x + g + b;
     int bw = tile->w - 2*(g+b); if (bw < 1) bw = 1;
-    int bh = TAB_BAR_HEIGHT - b; if (bh < 1) bh = 1;
+    int bh = cfg.tab_bar_height - b; if (bh < 1) bh = 1;
     int by;
-    if (BAR_POS_TOP)
+    if (cfg.statusbar_pos)
         by = tile->y + g + b;                              /* tab bar at top of tile */
     else
-        by = tile->y + tile->h - g - TAB_BAR_HEIGHT;       /* tab bar at bottom of tile */
+        by = tile->y + tile->h - g - cfg.tab_bar_height;       /* tab bar at bottom of tile */
     int is_active = (tile == ws()->active_tile);
-    const char *bar_bg = is_active ? COL_BORDER_ACTIVE : COL_TAB_BAR_BG;
+    const char *bar_bg = is_active ? cfg.col_border_active : cfg.col_tab_bar_bg;
 
     if (tile->tile.tab_bar_win == None) {
         XSetWindowAttributes swa;
@@ -1107,7 +1279,7 @@ static void draw_tab_bar(Node *tile)
     if (w < 1 || h < 1) return;
 
     int is_active = (tile == ws()->active_tile);
-    const char *bar_bg = is_active ? COL_BORDER_ACTIVE : COL_TAB_BAR_BG;
+    const char *bar_bg = is_active ? cfg.col_border_active : cfg.col_tab_bar_bg;
 
     Pixmap pm = XCreatePixmap(dpy, win, (unsigned)w, (unsigned)h, (unsigned)depth);
     GC gc = XCreateGC(dpy, pm, 0, NULL);
@@ -1129,11 +1301,11 @@ static void draw_tab_bar(Node *tile)
             int is_tab_act = (i == tile->tile.active_tab);
             const char *bg, *fg;
             if (is_tab_act) {
-                bg = is_active ? COL_TAB_ACTIVE_BG     : COL_TAB_ACTIVE_BG_DIM;
-                fg = is_active ? COL_TAB_ACTIVE_FG     : COL_TAB_ACTIVE_FG_DIM;
+                bg = is_active ? cfg.col_tab_active_bg     : cfg.col_tab_active_bg_dim;
+                fg = is_active ? cfg.col_tab_active_fg     : cfg.col_tab_active_fg_dim;
             } else {
-                bg = COL_TAB_INACTIVE_BG;
-                fg = COL_TAB_INACTIVE_FG;
+                bg = cfg.col_tab_inactive_bg;
+                fg = cfg.col_tab_inactive_fg;
             }
             int x0 = i * tab_w;
             int tw = (i < n - 1) ? tab_w : (w - x0);
@@ -1717,7 +1889,7 @@ static void cmd_dispatch(int client_fd, char *line)
     /* ---- help ---- */
     if (strcmp(line, "help") == 0) {
         cmd_reply(client_fd, "exec <cmd> | split h|v | split-move h|v | unsplit");
-        cmd_reply(client_fd, "close | quit | fullscreen");
+        cmd_reply(client_fd, "close | quit | reload | fullscreen | set <key> <value>");
         cmd_reply(client_fd, "next-tab | prev-tab | move-tab-fwd | move-tab-bwd");
         cmd_reply(client_fd, "next-ws | prev-ws | workspace <1-9> | send <1-9>");
         cmd_reply(client_fd, "focus <dir> | move <dir>  (dir: left|right|up|down)");
@@ -1739,9 +1911,32 @@ static void cmd_dispatch(int client_fd, char *line)
     if (strcmp(line, "split-move v") == 0)  { action_split(0, 1); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "unsplit") == 0)       { action_remove_split(); cmd_reply(client_fd, "ok"); return; }
 
-    /* ---- close / quit ---- */
+    /* ---- close / quit / reload ---- */
     if (strcmp(line, "close") == 0) { action_close_window(); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "quit") == 0)  { cmd_reply(client_fd, "ok"); action_quit(); return; }
+    if (strcmp(line, "reload") == 0) { reload_pending = 1; cmd_reply(client_fd, "ok"); return; }
+
+    /* ---- set <key> <value> — runtime config change ---- */
+    if (strncmp(line, "set ", 4) == 0) {
+        char *kv = line + 4;
+        while (*kv == ' ') kv++;
+        char *sp = strchr(kv, ' ');
+        if (sp) {
+            *sp = '\0';
+            char *val = sp + 1;
+            while (*val == ' ') val++;
+            if (cfg_set_kv(kv, val)) {
+                n_colors = 0;   /* flush colour cache */
+                cfg_apply();
+                cmd_reply(client_fd, "ok");
+            } else {
+                cmd_reply(client_fd, "err: unknown key");
+            }
+        } else {
+            cmd_reply(client_fd, "err: set <key> <value>");
+        }
+        return;
+    }
 
     /* ---- tab navigation ---- */
     if (strcmp(line, "next-tab") == 0) { action_next_tab(); cmd_reply(client_fd, "ok"); return; }
@@ -1902,6 +2097,46 @@ static int cmd_fdset(fd_set *fds)
         if (cmd_clients[i].fd > max_fd) max_fd = cmd_clients[i].fd;
     }
     return max_fd;
+}
+
+/* ===== Config apply (after reload) ===== */
+
+static void cfg_apply(void)
+{
+    /* Flush color cache so new colors get allocated */
+    n_colors = 0;
+
+    /* Recalculate bar reservations */
+    int top_r  = (cfg.statusbar_pos  ? cfg.statusbar_height : 0) + (cfg.timebar_pos  ? cfg.timebar_height : 0);
+    int bot_r  = (!cfg.statusbar_pos ? cfg.statusbar_height : 0) + (!cfg.timebar_pos ? cfg.timebar_height : 0);
+    tile_y_off = top_r;
+    tile_h_val = sh - top_r - bot_r;
+
+    /* Update all workspace geometry */
+    for (int i = 0; i < NUM_WORKSPACES; i++) {
+        workspaces[i].tile_y = tile_y_off;
+        workspaces[i].tile_h = tile_h_val;
+    }
+
+    /* Destroy and recreate status bar */
+    bar_destroy();
+    if (cfg.statusbar_height > 0) bar_init();
+
+    /* Destroy and recreate bottom bar */
+    bottom_bar_destroy();
+    bottom_bar_init();
+
+    /* Desktop background */
+    XSetWindowBackground(dpy, root_win, px(cfg.col_desktop_bg));
+    XClearWindow(dpy, root_win);
+
+    /* Re-arrange current workspace */
+    arrange_workspace(ws());
+    focus_tile(ws()->active_tile);
+    if (cfg.statusbar_height > 0) bar_draw();
+    bottom_bar_draw();
+
+    fprintf(stderr, "zwm: config applied\n");
 }
 
 /* ===== Event handlers ===== */
@@ -2076,7 +2311,19 @@ static void on_key_press(XEvent *ev)
         if (CLEAN_MASK(keybinds[i].mod) != state) continue;
 
         switch (keybinds[i].action) {
-            case ACT_SPAWN:             action_spawn_cmd(keybinds[i].sarg); break;
+            case ACT_SPAWN: {
+                const char *cmd = keybinds[i].sarg;
+                if (!cmd) {  /* slot index in iarg */
+                    switch (keybinds[i].iarg) {
+                        case 0: cmd = cfg.terminal_cmd; break;
+                        case 1: cmd = cfg.fm_cmd;       break;
+                        case 2: cmd = cfg.www_cmd;      break;
+                        case 3: cmd = cfg.launcher_cmd;  break;
+                    }
+                }
+                if (cmd) action_spawn_cmd(cmd);
+                break;
+            }
             case ACT_SPLIT:             action_split(keybinds[i].iarg & 1, keybinds[i].iarg & 2); break;
             case ACT_REMOVE_SPLIT:      action_remove_split(); break;
             case ACT_CLOSE_WINDOW:      action_close_window(); break;
@@ -2127,6 +2374,18 @@ int main(int argc, char **argv)
     (void)argc;
     saved_argv = argv;
     signal(SIGCHLD, SIG_IGN);
+    signal(SIGHUP,  on_sighup);
+
+    /* Load configuration: defaults, then overlay from file */
+    cfg_defaults();
+    {
+        char cfgpath[512];
+        if (cfg_resolve_path(cfgpath, sizeof(cfgpath))) {
+            int n = cfg_load(cfgpath);
+            if (n >= 0) fprintf(stderr, "zwm: loaded %d settings from %s\n", n, cfgpath);
+            else        fprintf(stderr, "zwm: failed to open %s\n", cfgpath);
+        }
+    }
 
     dpy = XOpenDisplay(NULL);
     if (!dpy) { fprintf(stderr, "Cannot open display\n"); return 1; }
@@ -2141,8 +2400,8 @@ int main(int argc, char **argv)
 
     /* Bar reservation — each bar independently chooses top or bottom */
     {
-        int top_r  = (BAR_POS_TOP  ? BAR_HEIGHT : 0) + (BBAR_POS_TOP  ? BOTTOM_BAR_HEIGHT : 0);
-        int bot_r  = (!BAR_POS_TOP ? BAR_HEIGHT : 0) + (!BBAR_POS_TOP ? BOTTOM_BAR_HEIGHT : 0);
+        int top_r  = (cfg.statusbar_pos  ? cfg.statusbar_height : 0) + (cfg.timebar_pos  ? cfg.timebar_height : 0);
+        int bot_r  = (!cfg.statusbar_pos ? cfg.statusbar_height : 0) + (!cfg.timebar_pos ? cfg.timebar_height : 0);
         tile_y_off = top_r;
         tile_h_val = sh - top_r - bot_r;
     }
@@ -2187,7 +2446,7 @@ int main(int argc, char **argv)
     running = 1;
 
     /* Desktop background */
-    XSetWindowBackground(dpy, root_win, px(COL_DESKTOP_BG));
+    XSetWindowBackground(dpy, root_win, px(cfg.col_desktop_bg));
     XClearWindow(dpy, root_win);
 
     /* Check for another WM */
@@ -2210,7 +2469,7 @@ int main(int argc, char **argv)
     init_ewmh();
 
     /* Status bar */
-    if (BAR_HEIGHT > 0) bar_init();
+    if (cfg.statusbar_height > 0) bar_init();
 
     /* Bottom hex-time bar */
     bottom_bar_init();
@@ -2259,14 +2518,14 @@ int main(int argc, char **argv)
 
         /* Periodic bar update */
         double now = mono_time();
-        if ((now - last_bar_update) >= BAR_UPDATE_INTERVAL) {
-            if (BAR_HEIGHT > 0) bar_draw();
+        if ((now - last_bar_update) >= cfg.bar_update_interval) {
+            if (cfg.statusbar_height > 0) bar_draw();
             bottom_bar_draw();
             last_bar_update = now;
         }
 
         /* Wait for X events, command socket, or timeout */
-        double remaining = BAR_UPDATE_INTERVAL - (mono_time() - last_bar_update);
+        double remaining = cfg.bar_update_interval - (mono_time() - last_bar_update);
         if (remaining < 0.05) remaining = 0.05;
         struct timeval tv;
         tv.tv_sec  = (long)remaining;
@@ -2281,6 +2540,18 @@ int main(int argc, char **argv)
 
         /* Handle command socket I/O */
         cmd_poll(&fds);
+
+        /* SIGHUP / socket "reload" — re-read config */
+        if (reload_pending) {
+            reload_pending = 0;
+            char cfgpath[512];
+            if (cfg_resolve_path(cfgpath, sizeof(cfgpath))) {
+                cfg_defaults();
+                int n = cfg_load(cfgpath);
+                fprintf(stderr, "zwm: reload %d settings from %s\n", n, cfgpath);
+                cfg_apply();
+            }
+        }
     }
 
     /* Cleanup */
