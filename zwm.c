@@ -1,5 +1,5 @@
 /*
- * ZWM — A tabbed tiling window manager inspired by Notion and TinyWM.
+ * SWM — A tabbed tiling window manager inspired by Notion and TinyWM.
  *   cc -O2 -o zwm zwm.c -lX11
  */
 
