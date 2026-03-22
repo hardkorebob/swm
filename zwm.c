@@ -1163,13 +1163,19 @@ static int should_float(Window wid)
                 atoms[i] == a_wm_type_tooltip  ||
                 atoms[i] == a_wm_type_notification ||
                 atoms[i] == a_wm_type_popup_menu ||
-                atoms[i] == a_wm_type_dock) {
+                atoms[i] == a_wm_type_dock ||
+                atoms[i] == a_wm_type_dialog) {
                 XFree(data);
                 return 1;
             }
         }
         XFree(data);
     } else if (data) { XFree(data); }
+
+    /* WM_TRANSIENT_FOR — window is a child dialog/popup of another window */
+    Window transient_for = None;
+    if (XGetTransientForHint(dpy, wid, &transient_for) && transient_for != None)
+        return 1;
 
     return 0;
 }
@@ -1249,6 +1255,10 @@ static void unmanage_window(Window wid)
             XMapWindow(dpy, status_bar_win);
             XRaiseWindow(dpy, status_bar_win);
         }
+        if (bottom_bar_win != None) {
+            XMapWindow(dpy, bottom_bar_win);
+            XRaiseWindow(dpy, bottom_bar_win);
+            }
     }
 
     Workspace *w = &workspaces[ws_idx];
