@@ -19,7 +19,7 @@ Hello, everybody. I just wanted to show off the project that I made with Claude 
 
 ## Build
 
-Requires `libX11-dev`.
+Requires `libX11-dev` library & `-misc-fixed-medium-r-*-*-13-*-*-*-*-*-iso8859-1` font
 
 ```
 cc -O2 -o zwm zwm.c -lX11
