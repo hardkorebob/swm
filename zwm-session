@@ -1,0 +1,14 @@
+#!/bin/sh
+# ZWM session launcher — called by LightDM / display manager.
+# Starts polybar (if installed), then launches the WM.
+
+# ── Optional: set your wallpaper ──
+# feh --bg-scale ~/wallpaper.jpg &
+
+# ── Optional: compositing ──
+# picom --daemon &
+
+nite
+# ── Start ZWM ──
+#exec python3 /usr/local/bin/zwm.py
+exec zwm
