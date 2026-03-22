@@ -36,6 +36,33 @@
 
 /* ===== Runtime configuration ===== */
 
+/* Keybinding action types (needed by Config) */
+typedef enum {
+    ACT_SPAWN,              /* sarg = command */
+    ACT_SPLIT,              /* iarg: bit 0 = horizontal, bit 1 = move window */
+    ACT_REMOVE_SPLIT,
+    ACT_CLOSE_WINDOW,
+    ACT_QUIT,
+    ACT_NEXT_TAB,
+    ACT_PREV_TAB,
+    ACT_MOVE_TAB_FWD,
+    ACT_MOVE_TAB_BWD,
+    ACT_NEXT_WORKSPACE,
+    ACT_PREV_WORKSPACE,
+    ACT_SWITCH_WORKSPACE,   /* iarg = workspace index */
+    ACT_SEND_TO_WORKSPACE,  /* iarg = workspace index */
+    ACT_FOCUS_DIR,          /* sarg = "left"|"right"|"up"|"down" */
+    ACT_MOVE_WIN_DIR,       /* sarg = "left"|"right"|"up"|"down" */
+} Action;
+
+typedef struct {
+    KeySym      key;
+    unsigned    mod;        /* required modifiers (e.g. Mod4Mask, Mod4Mask|ShiftMask, 0) */
+    Action      action;
+    int         iarg;
+    char        sarg[32];   /* owned string arg (direction, custom cmd, etc.) */
+} Keybind;
+
 typedef struct {
     /* Dimensions */
     int    tab_bar_height;
@@ -52,6 +79,7 @@ typedef struct {
     char fm_cmd[128];
     char www_cmd[128];
     char launcher_cmd[128];
+    char reload_cmd[128];
 
     /* Colors — status bar */
     char col_statusbar_bg[8];
@@ -83,6 +111,10 @@ typedef struct {
     char col_timebar_seg[8];
     char col_timebar_label[8];
     char col_timebar_track[8];
+
+    /* Keybindings (runtime-configurable) */
+    Keybind binds[MAX_BINDINGS];
+    int     n_binds;
 } Config;
 
 static Config cfg;
@@ -102,6 +134,7 @@ static void cfg_defaults(void)
     strncpy(cfg.fm_cmd,       "thunar",    sizeof(cfg.fm_cmd) - 1);
     strncpy(cfg.www_cmd,      "firefox",   sizeof(cfg.www_cmd) - 1);
     strncpy(cfg.launcher_cmd, "dmenu_run", sizeof(cfg.launcher_cmd) - 1);
+    strncpy(cfg.reload_cmd, "swmctl reload", sizeof(cfg.reload_cmd) - 1);
 
     strncpy(cfg.col_statusbar_bg,          "#1E1E1E", 7);
     strncpy(cfg.col_statusbar_fg,          "#FFBF00", 7);
@@ -129,6 +162,240 @@ static void cfg_defaults(void)
     strncpy(cfg.col_timebar_seg,   "#CCAA00", 7);
     strncpy(cfg.col_timebar_label, "#FFFFFF", 7);
     strncpy(cfg.col_timebar_track, "#333333", 7);
+
+    /* Default keybindings */
+    cfg.n_binds = 0;
+    #define B(k, m, a, i, s) do { \
+        Keybind *b = &cfg.binds[cfg.n_binds++]; \
+        b->key = (k); b->mod = (m); b->action = (a); b->iarg = (i); \
+        b->sarg[0] = '\0'; if (s) strncpy(b->sarg, (s), sizeof(b->sarg)-1); \
+    } while(0)
+
+    /* F-keys — no modifier */
+    B(XK_F1, 0, ACT_PREV_TAB,       0, NULL);
+    B(XK_F2, 0, ACT_NEXT_TAB,       0, NULL);
+    B(XK_F3, 0, ACT_PREV_WORKSPACE, 0, NULL);
+    B(XK_F4, 0, ACT_NEXT_WORKSPACE, 0, NULL);
+    B(XK_F6, 0, ACT_CLOSE_WINDOW,   0, NULL);
+    B(XK_F7, 0, ACT_SPAWN,          3, NULL);  /* launcher */
+    B(XK_F8, 0, ACT_SPAWN,          1, NULL);  /* file manager */
+    B(XK_F9, 0, ACT_SPAWN,          2, NULL);  /* browser */
+    
+    /* Mod4 — plain */
+    B(XK_Return, Mod4Mask, ACT_SPAWN,        0, NULL);  /* terminal */
+    B(XK_h,      Mod4Mask, ACT_SPLIT,        1, NULL);  /* horizontal */
+    B(XK_v,      Mod4Mask, ACT_SPLIT,        0, NULL);  /* vertical */
+    B(XK_d,      Mod4Mask, ACT_REMOVE_SPLIT, 0, NULL);
+    B(XK_q,      Mod4Mask, ACT_QUIT,         0, NULL);
+    B(XK_comma,  Mod4Mask, ACT_MOVE_TAB_BWD, 0, NULL);
+    B(XK_period, Mod4Mask, ACT_MOVE_TAB_FWD, 0, NULL);
+    B(XK_r,      Mod4Mask, ACT_SPAWN,        4, NULL);  /*reload*/
+
+    /* Mod4 — arrows */
+    B(XK_Left,  Mod4Mask, ACT_FOCUS_DIR, 0, "left");
+    B(XK_Right, Mod4Mask, ACT_FOCUS_DIR, 0, "right");
+    B(XK_Up,    Mod4Mask, ACT_FOCUS_DIR, 0, "up");
+    B(XK_Down,  Mod4Mask, ACT_FOCUS_DIR, 0, "down");
+
+    /* Mod4+Shift — split with move */
+    B(XK_h, Mod4Mask|ShiftMask, ACT_SPLIT, 3, NULL);  /* horizontal + move */
+    B(XK_v, Mod4Mask|ShiftMask, ACT_SPLIT, 2, NULL);  /* vertical + move */
+
+    /* Mod4+Shift — arrows */
+    B(XK_Left,  Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "left");
+    B(XK_Right, Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "right");
+    B(XK_Up,    Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "up");
+    B(XK_Down,  Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "down");
+
+    /* Mod4 + number — switch workspace */
+    for (int i = 0; i < 9; i++)
+        B(XK_1 + i, Mod4Mask, ACT_SWITCH_WORKSPACE, i, NULL);
+
+    /* Mod4+Shift + number — send to workspace */
+    for (int i = 0; i < 9; i++)
+        B(XK_1 + i, Mod4Mask|ShiftMask, ACT_SEND_TO_WORKSPACE, i, NULL);
+
+    #undef B
+}
+
+/* ===== Keybinding config parser ===== */
+
+/* Map modifier name → X mask.  Returns 0 if unrecognised. */
+static unsigned parse_mod_token(const char *s)
+{
+    if (strcmp(s, "Mod4")    == 0 || strcmp(s, "Super") == 0) return Mod4Mask;
+    if (strcmp(s, "Shift")   == 0) return ShiftMask;
+    if (strcmp(s, "Mod1")    == 0 || strcmp(s, "Alt")   == 0) return Mod1Mask;
+    if (strcmp(s, "Control") == 0 || strcmp(s, "Ctrl")  == 0) return ControlMask;
+    if (strcmp(s, "Mod2")    == 0) return Mod2Mask;
+    if (strcmp(s, "Mod3")    == 0) return Mod3Mask;
+    if (strcmp(s, "Mod5")    == 0) return Mod5Mask;
+    return 0;
+}
+
+/* Action name → enum mapping */
+static const struct { const char *name; Action act; } action_map[] = {
+    { "spawn",          ACT_SPAWN },
+    { "split_h",        ACT_SPLIT },
+    { "split_v",        ACT_SPLIT },
+    { "split_h_move",   ACT_SPLIT },
+    { "split_v_move",   ACT_SPLIT },
+    { "remove_split",   ACT_REMOVE_SPLIT },
+    { "close",          ACT_CLOSE_WINDOW },
+    { "quit",           ACT_QUIT },
+    { "next_tab",       ACT_NEXT_TAB },
+    { "prev_tab",       ACT_PREV_TAB },
+    { "move_tab_fwd",   ACT_MOVE_TAB_FWD },
+    { "move_tab_bwd",   ACT_MOVE_TAB_BWD },
+    { "next_ws",        ACT_NEXT_WORKSPACE },
+    { "prev_ws",        ACT_PREV_WORKSPACE },
+    { "switch_ws",      ACT_SWITCH_WORKSPACE },
+    { "send_to_ws",     ACT_SEND_TO_WORKSPACE },
+    { "focus",          ACT_FOCUS_DIR },
+    { "move_win",       ACT_MOVE_WIN_DIR },
+    { NULL, 0 }
+};
+
+/* Resolve the iarg for split actions by name */
+static int split_iarg(const char *name)
+{
+    if (strcmp(name, "split_h")      == 0) return 1;
+    if (strcmp(name, "split_v")      == 0) return 0;
+    if (strcmp(name, "split_h_move") == 0) return 3;
+    if (strcmp(name, "split_v_move") == 0) return 2;
+    return 0;
+}
+
+/* Resolve the iarg for spawn: "terminal"=0, "file_manager"=1, "browser"=2, "launcher"=3,
+   or -1 meaning sarg holds a custom command. */
+static int spawn_slot(const char *arg)
+{
+    if (strcmp(arg, "terminal")     == 0) return 0;
+    if (strcmp(arg, "file_manager") == 0) return 1;
+    if (strcmp(arg, "browser")      == 0) return 2;
+    if (strcmp(arg, "launcher")     == 0) return 3;
+    if (strcmp(arg, "reload")       == 0) return 4;
+    return -1;  /* custom command */
+}
+
+static int cfg_parse_bind(const char *val)
+{
+    if (cfg.n_binds >= MAX_BINDINGS) {
+        fprintf(stderr, "swm: max bindings (%d) reached\n", MAX_BINDINGS);
+        return 0;
+    }
+
+    char buf[256];
+    strncpy(buf, val, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    /* Split into: chord, action_name, arg (rest of line) */
+    char *chord = buf;
+    while (*chord == ' ' || *chord == '\t') chord++;
+
+    char *sp = chord;
+    while (*sp && *sp != ' ' && *sp != '\t') sp++;
+    if (!*sp) { fprintf(stderr, "swm: bind: missing action in '%s'\n", val); return 0; }
+    *sp++ = '\0';
+
+    while (*sp == ' ' || *sp == '\t') sp++;
+    char *act_name = sp;
+
+    while (*sp && *sp != ' ' && *sp != '\t') sp++;
+    char *arg = NULL;
+    if (*sp) {
+        *sp++ = '\0';
+        while (*sp == ' ' || *sp == '\t') sp++;
+        if (*sp) arg = sp;
+        /* trim trailing whitespace from arg */
+        if (arg) {
+            char *e = arg + strlen(arg) - 1;
+            while (e > arg && (*e == ' ' || *e == '\t')) *e-- = '\0';
+        }
+    }
+
+    /* --- Parse chord: Mod4+Shift+Return → mod mask + keysym --- */
+    unsigned mod = 0;
+    KeySym ks = NoSymbol;
+    {
+        char chord_buf[128];
+        strncpy(chord_buf, chord, sizeof(chord_buf) - 1);
+        chord_buf[sizeof(chord_buf) - 1] = '\0';
+
+        /* Split on '+' and process tokens */
+        char *tokens[8];
+        int ntok = 0;
+        char *t = strtok(chord_buf, "+");
+        while (t && ntok < 8) { tokens[ntok++] = t; t = strtok(NULL, "+"); }
+
+        if (ntok == 0) { fprintf(stderr, "swm: bind: empty chord in '%s'\n", val); return 0; }
+
+        /* Last token is the key, preceding tokens are modifiers */
+        for (int i = 0; i < ntok - 1; i++) {
+            unsigned m = parse_mod_token(tokens[i]);
+            if (!m) { fprintf(stderr, "swm: bind: unknown modifier '%s'\n", tokens[i]); return 0; }
+            mod |= m;
+        }
+
+        ks = XStringToKeysym(tokens[ntok - 1]);
+        if (ks == NoSymbol) {
+            fprintf(stderr, "swm: bind: unknown key '%s'\n", tokens[ntok - 1]);
+            return 0;
+        }
+    }
+
+    /* --- Parse action --- */
+    Action action = (Action)-1;
+    for (int i = 0; action_map[i].name; i++) {
+        if (strcmp(act_name, action_map[i].name) == 0) {
+            action = action_map[i].act;
+            break;
+        }
+    }
+    if ((int)action == -1) {
+        fprintf(stderr, "swm: bind: unknown action '%s'\n", act_name);
+        return 0;
+    }
+
+    /* --- Build the Keybind entry --- */
+    Keybind *b = &cfg.binds[cfg.n_binds];
+    memset(b, 0, sizeof(*b));
+    b->key = ks;
+    b->mod = mod;
+    b->action = action;
+
+    switch (action) {
+        case ACT_SPLIT:
+            b->iarg = split_iarg(act_name);
+            break;
+        case ACT_SPAWN:
+            if (arg) {
+                int slot = spawn_slot(arg);
+                if (slot >= 0) {
+                    b->iarg = slot;
+                } else {
+                    /* Custom command in sarg */
+                    b->iarg = -1;
+                    strncpy(b->sarg, arg, sizeof(b->sarg) - 1);
+                }
+            }
+            break;
+        case ACT_SWITCH_WORKSPACE:
+        case ACT_SEND_TO_WORKSPACE:
+            if (arg) b->iarg = atoi(arg) - 1;  /* config uses 1-9, internal uses 0-8 */
+            if (b->iarg < 0) b->iarg = 0;
+            if (b->iarg >= NUM_WORKSPACES) b->iarg = NUM_WORKSPACES - 1;
+            break;
+        case ACT_FOCUS_DIR:
+        case ACT_MOVE_WIN_DIR:
+            if (arg) strncpy(b->sarg, arg, sizeof(b->sarg) - 1);
+            break;
+        default:
+            break;
+    }
+
+    cfg.n_binds++;
+    return 1;
 }
 
 /* ===== Config file parser ===== */
@@ -167,6 +434,9 @@ static int cfg_set_kv(const char *key, const char *val)
     if (strcmp(key, "file_manager") == 0) { strncpy(cfg.fm_cmd,       val, sizeof(cfg.fm_cmd) - 1);       return 1; }
     if (strcmp(key, "browser") == 0)      { strncpy(cfg.www_cmd,      val, sizeof(cfg.www_cmd) - 1);      return 1; }
     if (strcmp(key, "launcher") == 0)     { strncpy(cfg.launcher_cmd, val, sizeof(cfg.launcher_cmd) - 1); return 1; }
+    if (strcmp(key, "reload") == 0)       { strncpy(cfg.reload_cmd,   val, sizeof(cfg.reload_cmd) - 1);   return 1; }
+    /* Keybindings — appends to current binds array (caller handles clear-on-first) */
+    if (strcmp(key, "bind") == 0) return cfg_parse_bind(val);
 
     /* Colors — validate: must start with # and be 7 chars escape: with swmctl set col_statusbar_bg "#FF0000" "*/
     if (val[0] != '#' || strlen(val) < 7) return 0;
@@ -204,6 +474,8 @@ static int cfg_load(const char *path)
     FILE *f = fopen(path, "r");
     if (!f) return -1;
 
+    int seen_bind = 0;  /* replace-all: first bind line clears defaults */
+
     char line[512];
     int lineno = 0, count = 0;
     while (fgets(line, sizeof(line), f)) {
@@ -236,6 +508,12 @@ static int cfg_load(const char *path)
         char *vend = val + strlen(val) - 1;
         while (vend > val && (*vend == ' ' || *vend == '\t')) *vend-- = '\0';
 
+        /* Replace-all: first bind line wipes default keybindings */
+        if (strcmp(p, "bind") == 0 && !seen_bind) {
+            seen_bind = 1;
+            cfg.n_binds = 0;
+        }
+
         if (cfg_set_kv(p, val)) count++;
     }
     fclose(f);
@@ -249,6 +527,7 @@ static void on_sighup(int sig) { (void)sig; reload_pending = 1; }
 
 /* Forward declaration — defined after bar functions exist */
 static void cfg_apply(void);
+static void grab_keys(void);
 
 /* ===== Data structures ===== */
 
@@ -327,94 +606,7 @@ static Atom a_wm_type_popup_menu, a_wm_transient_for;
 /* For restart */
 static char **saved_argv;
 
-/* ===== Keybinding table ===== */
-
-typedef enum {
-    ACT_SPAWN,              /* sarg = command */
-    ACT_SPLIT,              /* iarg: bit 0 = horizontal, bit 1 = move window */
-    ACT_REMOVE_SPLIT,
-    ACT_CLOSE_WINDOW,
-    ACT_QUIT,
-    ACT_NEXT_TAB,
-    ACT_PREV_TAB,
-    ACT_MOVE_TAB_FWD,
-    ACT_MOVE_TAB_BWD,
-    ACT_NEXT_WORKSPACE,
-    ACT_PREV_WORKSPACE,
-    ACT_SWITCH_WORKSPACE,   /* iarg = workspace index */
-    ACT_SEND_TO_WORKSPACE,  /* iarg = workspace index */
-    ACT_FOCUS_DIR,          /* sarg = "left"|"right"|"up"|"down" */
-    ACT_MOVE_WIN_DIR,       /* sarg = "left"|"right"|"up"|"down" */
-} Action;
-
-typedef struct {
-    KeySym      key;
-    unsigned    mod;        /* required modifiers (e.g. Mod4Mask, Mod4Mask|ShiftMask, 0) */
-    Action      action;
-    int         iarg;
-    const char *sarg;
-} Keybind;
-
-static Keybind keybinds[] = {
-    /* F-keys — no modifier */
-    { XK_F1,     0,                      ACT_PREV_TAB,          0, NULL },
-    { XK_F2,     0,                      ACT_NEXT_TAB,          0, NULL },
-    { XK_F3,     0,                      ACT_PREV_WORKSPACE,    0, NULL },
-    { XK_F4,     0,                      ACT_NEXT_WORKSPACE,    0, NULL },
-    { XK_F6,     0,                      ACT_CLOSE_WINDOW,      0, NULL },
-    { XK_F7,     0,                      ACT_SPAWN,             3, NULL },  /* launcher */
-    { XK_F8,     0,                      ACT_SPAWN,             1, NULL },  /* file manager */
-    { XK_F9,     0,                      ACT_SPAWN,             2, NULL },  /* browser */
-
-    /* Mod4 — plain */
-    { XK_Return, Mod4Mask,               ACT_SPAWN,             0, NULL },  /* terminal */
-    { XK_h,      Mod4Mask,               ACT_SPLIT,             1, NULL },  /* horizontal */
-    { XK_v,      Mod4Mask,               ACT_SPLIT,             0, NULL },  /* vertical */
-    { XK_d,      Mod4Mask,               ACT_REMOVE_SPLIT,      0, NULL },
-    { XK_q,      Mod4Mask,               ACT_QUIT,              0, NULL },
-    { XK_comma,  Mod4Mask,               ACT_MOVE_TAB_BWD,      0, NULL },
-    { XK_period, Mod4Mask,               ACT_MOVE_TAB_FWD,      0, NULL },
-
-    /* Mod4 — arrows */
-    { XK_Left,   Mod4Mask,               ACT_FOCUS_DIR,         0, "left" },
-    { XK_Right,  Mod4Mask,               ACT_FOCUS_DIR,         0, "right" },
-    { XK_Up,     Mod4Mask,               ACT_FOCUS_DIR,         0, "up" },
-    { XK_Down,   Mod4Mask,               ACT_FOCUS_DIR,         0, "down" },
-
-    /* Mod4+Shift — split with move */
-    { XK_h,      Mod4Mask | ShiftMask,   ACT_SPLIT,             3, NULL },  /* horizontal + move */
-    { XK_v,      Mod4Mask | ShiftMask,   ACT_SPLIT,             2, NULL },  /* vertical + move */
-
-    /* Mod4+Shift — arrows */
-    { XK_Left,   Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "left" },
-    { XK_Right,  Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "right" },
-    { XK_Up,     Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "up" },
-    { XK_Down,   Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "down" },
-
-    /* Mod4 + number — switch workspace */
-    { XK_1,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  0, NULL },
-    { XK_2,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  1, NULL },
-    { XK_3,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  2, NULL },
-    { XK_4,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  3, NULL },
-    { XK_5,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  4, NULL },
-    { XK_6,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  5, NULL },
-    { XK_7,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  6, NULL },
-    { XK_8,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  7, NULL },
-    { XK_9,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  8, NULL },
-
-    /* Mod4+Shift + number — send to workspace */
-    { XK_1,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 0, NULL },
-    { XK_2,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 1, NULL },
-    { XK_3,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 2, NULL },
-    { XK_4,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 3, NULL },
-    { XK_5,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 4, NULL },
-    { XK_6,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 5, NULL },
-    { XK_7,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 6, NULL },
-    { XK_8,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 7, NULL },
-    { XK_9,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 8, NULL },
-};
-
-static int n_keybinds = (int)(sizeof(keybinds) / sizeof(keybinds[0]));
+/* ===== Keybinding helpers ===== */
 
 /* Mask out NumLock (Mod2Mask) and CapsLock (LockMask) for matching */
 #define CLEAN_MASK(m)  ((m) & ~(Mod2Mask | LockMask))
@@ -2139,6 +2331,9 @@ static void cfg_apply(void)
     if (cfg.statusbar_height > 0) bar_draw();
     bottom_bar_draw();
 
+    /* Re-grab keys with (possibly new) bindings */
+    grab_keys();
+
     fprintf(stderr, "swm: config applied\n");
 }
 
@@ -2318,25 +2513,26 @@ static void on_key_press(XEvent *ev)
     KeySym ks = XLookupKeysym(&ev->xkey, 0);
     unsigned state = CLEAN_MASK(ev->xkey.state);
 
-    for (int i = 0; i < n_keybinds; i++) {
-        if (keybinds[i].key != ks) continue;
-        if (CLEAN_MASK(keybinds[i].mod) != state) continue;
+    for (int i = 0; i < cfg.n_binds; i++) {
+        if (cfg.binds[i].key != ks) continue;
+        if (CLEAN_MASK(cfg.binds[i].mod) != state) continue;
 
-        switch (keybinds[i].action) {
+        switch (cfg.binds[i].action) {
             case ACT_SPAWN: {
-                const char *cmd = keybinds[i].sarg;
+                const char *cmd = cfg.binds[i].sarg[0] ? cfg.binds[i].sarg : NULL;
                 if (!cmd) {  /* slot index in iarg */
-                    switch (keybinds[i].iarg) {
+                    switch (cfg.binds[i].iarg) {
                         case 0: cmd = cfg.terminal_cmd; break;
                         case 1: cmd = cfg.fm_cmd;       break;
                         case 2: cmd = cfg.www_cmd;      break;
                         case 3: cmd = cfg.launcher_cmd;  break;
+                        case 4: cmd = cfg.reload_cmd;  break;
                     }
                 }
                 if (cmd) action_spawn_cmd(cmd);
                 break;
             }
-            case ACT_SPLIT:             action_split(keybinds[i].iarg & 1, keybinds[i].iarg & 2); break;
+            case ACT_SPLIT:             action_split(cfg.binds[i].iarg & 1, cfg.binds[i].iarg & 2); break;
             case ACT_REMOVE_SPLIT:      action_remove_split(); break;
             case ACT_CLOSE_WINDOW:      action_close_window(); break;
             case ACT_QUIT:              action_quit(); break;
@@ -2346,10 +2542,10 @@ static void on_key_press(XEvent *ev)
             case ACT_MOVE_TAB_BWD:      action_move_tab_backward(); break;
             case ACT_NEXT_WORKSPACE:    action_next_workspace(); break;
             case ACT_PREV_WORKSPACE:    action_prev_workspace(); break;
-            case ACT_SWITCH_WORKSPACE:  action_switch_workspace(keybinds[i].iarg); break;
-            case ACT_SEND_TO_WORKSPACE: action_send_to_workspace(keybinds[i].iarg); break;
-            case ACT_FOCUS_DIR:         action_focus_direction(keybinds[i].sarg); break;
-            case ACT_MOVE_WIN_DIR:      action_move_window_direction(keybinds[i].sarg); break;
+            case ACT_SWITCH_WORKSPACE:  action_switch_workspace(cfg.binds[i].iarg); break;
+            case ACT_SEND_TO_WORKSPACE: action_send_to_workspace(cfg.binds[i].iarg); break;
+            case ACT_FOCUS_DIR:         action_focus_direction(cfg.binds[i].sarg); break;
+            case ACT_MOVE_WIN_DIR:      action_move_window_direction(cfg.binds[i].sarg); break;
         }
         return;
     }
@@ -2366,11 +2562,11 @@ static void grab_keys(void)
     unsigned lock_mods[] = { 0, Mod2Mask, LockMask, Mod2Mask | LockMask };
     int n_lock = (int)(sizeof(lock_mods) / sizeof(lock_mods[0]));
 
-    for (int i = 0; i < n_keybinds; i++) {
-        KeyCode kc = XKeysymToKeycode(dpy, keybinds[i].key);
+    for (int i = 0; i < cfg.n_binds; i++) {
+        KeyCode kc = XKeysymToKeycode(dpy, cfg.binds[i].key);
         if (!kc) continue;
         for (int j = 0; j < n_lock; j++)
-            XGrabKey(dpy, kc, keybinds[i].mod | lock_mods[j],
+            XGrabKey(dpy, kc, cfg.binds[i].mod | lock_mods[j],
                      root_win, True, GrabModeAsync, GrabModeAsync);
     }
 
