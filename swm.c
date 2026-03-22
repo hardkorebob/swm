@@ -1,6 +1,6 @@
 /*
  * SWM — A tabbed tiling window manager inspired by Notion and TinyWM.
- *   cc -O2 -o zwm zwm.c -lX11
+ *   cc -O2 -o swm swm.c -lX11
  */
 
 #include <X11/Xlib.h>
@@ -24,7 +24,7 @@
 /* ===== Compile-time limits (not runtime-configurable) ===== */
 
 #define NUM_WORKSPACES      9
-#define CMD_SOCK_PATH       "/tmp/zwm.sock"
+#define CMD_SOCK_PATH       "/tmp/swm.sock"
 #define CMD_MAX_CLIENTS     8
 #define CMD_BUF_SIZE        512
 #define MAX_WINS_PER_TILE   64
@@ -139,12 +139,12 @@ static int cfg_resolve_path(char *out, int len)
     const char *env;
     env = getenv("XDG_CONFIG_HOME");
     if (env && *env) {
-        snprintf(out, len, "%s/zwm/config", env);
+        snprintf(out, len, "%s/swm/config", env);
         if (access(out, R_OK) == 0) return 1;
     }
     const char *home = getenv("HOME");
     if (!home) home = "/root";
-    snprintf(out, len, "%s/.config/zwm/config", home);
+    snprintf(out, len, "%s/.config/swm/config", home);
     if (access(out, R_OK) == 0) return 1;
     return 0;
 }
@@ -220,7 +220,7 @@ static int cfg_load(const char *path)
         /* Split on '=' */
         char *eq = strchr(p, '=');
         if (!eq) {
-            fprintf(stderr, "zwm: config:%d: missing '='\n", lineno);
+            fprintf(stderr, "swm: config:%d: missing '='\n", lineno);
             continue;
         }
 
@@ -727,9 +727,9 @@ static void init_ewmh(void)
 
     /* Set WM name on both root and check window */
     XChangeProperty(dpy, ewmh_check_win, a_net_wm_name, a_utf8, 8,
-                    PropModeReplace, (unsigned char *)"ZWM", 3);
+                    PropModeReplace, (unsigned char *)"SWM", 3);
     XChangeProperty(dpy, root_win, a_net_wm_name, a_utf8, 8,
-                    PropModeReplace, (unsigned char *)"ZWM", 3);
+                    PropModeReplace, (unsigned char *)"SWM", 3);
 
     /* Do NOT map — the check window must stay hidden */
 
@@ -1798,12 +1798,12 @@ static void action_quit(void)
 
 static void cmd_init(void)
 {
-    /* Determine socket path: prefer $XDG_RUNTIME_DIR/zwm.sock */
+    /* Determine socket path: prefer $XDG_RUNTIME_DIR/swm.sock */
     const char *path = CMD_SOCK_PATH;
     char xdg_path[256];
     const char *xdg = getenv("XDG_RUNTIME_DIR");
     if (xdg && strlen(xdg) < sizeof(xdg_path) - 16) {
-        snprintf(xdg_path, sizeof(xdg_path), "%s/zwm.sock", xdg);
+        snprintf(xdg_path, sizeof(xdg_path), "%s/swm.sock", xdg);
         path = xdg_path;
     }
 
@@ -1811,7 +1811,7 @@ static void cmd_init(void)
 
     cmd_listen_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (cmd_listen_fd < 0) {
-        fprintf(stderr, "zwm: cmd socket: %s\n", strerror(errno));
+        fprintf(stderr, "swm: cmd socket: %s\n", strerror(errno));
         return;
     }
 
@@ -1821,14 +1821,14 @@ static void cmd_init(void)
     strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 
     if (bind(cmd_listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "zwm: cmd bind(%s): %s\n", path, strerror(errno));
+        fprintf(stderr, "swm: cmd bind(%s): %s\n", path, strerror(errno));
         close(cmd_listen_fd);
         cmd_listen_fd = -1;
         return;
     }
 
     if (listen(cmd_listen_fd, 4) < 0) {
-        fprintf(stderr, "zwm: cmd listen: %s\n", strerror(errno));
+        fprintf(stderr, "swm: cmd listen: %s\n", strerror(errno));
         close(cmd_listen_fd);
         cmd_listen_fd = -1;
         unlink(path);
@@ -1836,7 +1836,7 @@ static void cmd_init(void)
     }
 
     n_cmd_clients = 0;
-    fprintf(stderr, "zwm: listening on %s\n", path);
+    fprintf(stderr, "swm: listening on %s\n", path);
 }
 
 static void cmd_cleanup(void)
@@ -1854,7 +1854,7 @@ static void cmd_cleanup(void)
     const char *xdg = getenv("XDG_RUNTIME_DIR");
     if (xdg) {
         char p[256];
-        snprintf(p, sizeof(p), "%s/zwm.sock", xdg);
+        snprintf(p, sizeof(p), "%s/swm.sock", xdg);
         unlink(p);
     }
     unlink(CMD_SOCK_PATH);
@@ -2136,7 +2136,7 @@ static void cfg_apply(void)
     if (cfg.statusbar_height > 0) bar_draw();
     bottom_bar_draw();
 
-    fprintf(stderr, "zwm: config applied\n");
+    fprintf(stderr, "swm: config applied\n");
 }
 
 /* ===== Event handlers ===== */
@@ -2382,8 +2382,8 @@ int main(int argc, char **argv)
         char cfgpath[512];
         if (cfg_resolve_path(cfgpath, sizeof(cfgpath))) {
             int n = cfg_load(cfgpath);
-            if (n >= 0) fprintf(stderr, "zwm: loaded %d settings from %s\n", n, cfgpath);
-            else        fprintf(stderr, "zwm: failed to open %s\n", cfgpath);
+            if (n >= 0) fprintf(stderr, "swm: loaded %d settings from %s\n", n, cfgpath);
+            else        fprintf(stderr, "swm: failed to open %s\n", cfgpath);
         }
     }
 
@@ -2548,7 +2548,7 @@ int main(int argc, char **argv)
             if (cfg_resolve_path(cfgpath, sizeof(cfgpath))) {
                 cfg_defaults();
                 int n = cfg_load(cfgpath);
-                fprintf(stderr, "zwm: reload %d settings from %s\n", n, cfgpath);
+                fprintf(stderr, "swm: reload %d settings from %s\n", n, cfgpath);
                 cfg_apply();
             }
         }
