@@ -89,13 +89,13 @@ static Config cfg;
 
 static void cfg_defaults(void)
 {
-    cfg.tab_bar_height      = 22;
-    cfg.border_width        = 1;
-    cfg.border_gap          = 2;
-    cfg.statusbar_height    = 24;
-    cfg.statusbar_pos       = 0;
-    cfg.timebar_pos         = 1;
-    cfg.timebar_height      = 14;
+    cfg.tab_bar_height     = 22;
+    cfg.border_width       = 1;
+    cfg.border_gap         = 2;
+    cfg.statusbar_height         = 24;
+    cfg.statusbar_pos        = 0;
+    cfg.timebar_pos       = 1;
+    cfg.timebar_height  = 14;
     cfg.bar_update_interval = 1.0;
 
     strncpy(cfg.terminal_cmd, "xterm",     sizeof(cfg.terminal_cmd) - 1);
@@ -168,7 +168,6 @@ static int cfg_set_kv(const char *key, const char *val)
     if (strcmp(key, "browser") == 0)      { strncpy(cfg.www_cmd,      val, sizeof(cfg.www_cmd) - 1);      return 1; }
     if (strcmp(key, "launcher") == 0)     { strncpy(cfg.launcher_cmd, val, sizeof(cfg.launcher_cmd) - 1); return 1; }
 
-    /* Colors — validate: must start with # and be 7 chars */
     if (val[0] != '#' || strlen(val) < 7) return 0;
 
     if (strcmp(key, "col_statusbar_bg") == 0)            { strncpy(cfg.col_statusbar_bg,          val, 7); return 1; }
@@ -1495,7 +1494,10 @@ static void manage_window(Window wid)
             if (ny < 0) ny = 0;
             XMoveWindow(dpy, wid, nx, ny);
         }
+        XSelectInput(dpy, wid, StructureNotifyMask);
+        XMapWindow(dpy, wid);
         XRaiseWindow(dpy, wid);
+        XSetInputFocus(dpy, wid, RevertToParent, CurrentTime);
         XFlush(dpy);
         return;
     }
@@ -2144,7 +2146,6 @@ static void cfg_apply(void)
 static void on_map_request(XEvent *ev)
 {
     Window wid = ev->xmaprequest.window;
-    XMapWindow(dpy, wid);
     manage_window(wid);
 }
 
@@ -2266,6 +2267,16 @@ static void on_button_press(XEvent *ev)
             focus_tile(tile);
         }
     }
+
+    {
+        XWindowAttributes wa;
+        if (XGetWindowAttributes(dpy, wid, &wa) && !wa.override_redirect &&
+            wid != root_win && wid != status_bar_win && wid != bottom_bar_win) {
+            XRaiseWindow(dpy, wid);
+            XSetInputFocus(dpy, wid, RevertToParent, CurrentTime);
+        }
+    }
+
 }
 
 static void on_property_notify(XEvent *ev)
