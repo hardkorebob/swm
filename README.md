@@ -83,7 +83,7 @@ Format is `key = value`, one per line. Lines starting with `#` are comments.
 | q | Quit                     |
 | , | Move tab backward        |
 | . | Move tab forward         |
-| Arrows | Focus adjacent tile |
+| Arrows | Raise adjacent tile |
 | 1-9    | Switch workspace    |
 
 ### Mod4+Shift
