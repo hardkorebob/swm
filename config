@@ -8,15 +8,16 @@
 tab_bar_height      = 22
 border_width        = 1
 border_gap          = 2
-statusbar_pos        = 0        # 0 = bottom, 1 = top
+# 0 = bottom, 1 = top
+statusbar_pos        = 0        
 statusbar_height          = 24
-timebar_pos        = 1        # hex-time bar: 0 = bottom, 1 = top
+timebar_pos        = 1        
 timebar_height   = 14
 bar_update_interval = 1.0
 
 # ===== Commands =====
 
-terminal     = xterm
+terminal     = lxterminal
 file_manager = thunar
 browser      = firefox
 launcher     = dmenu_run
@@ -38,7 +39,8 @@ col_tab_inactive_bg   = #3C3C3C
 col_tab_active_fg     = #000000
 col_tab_inactive_fg   = #AAAAAA
 col_tab_bar_bg        = #2B2B2B
-col_tab_active_bg_dim = #555555    # active tab in unfocused tile
+# active tab in unfocused tile
+col_tab_active_bg_dim = #555555    
 col_tab_active_fg_dim = #CCCCCC
 
 # ===== Colours — borders / desktop =====
