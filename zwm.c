@@ -147,6 +147,100 @@ static Atom a_wm_type_popup_menu, a_wm_transient_for;
 /* For restart */
 static char **saved_argv;
 
+/* ===== Keybinding table ===== */
+
+typedef enum {
+    ACT_SPAWN,              /* sarg = command */
+    ACT_SPLIT,              /* iarg: bit 0 = horizontal, bit 1 = move window */
+    ACT_REMOVE_SPLIT,
+    ACT_CLOSE_WINDOW,
+    ACT_QUIT,
+    ACT_NEXT_TAB,
+    ACT_PREV_TAB,
+    ACT_MOVE_TAB_FWD,
+    ACT_MOVE_TAB_BWD,
+    ACT_NEXT_WORKSPACE,
+    ACT_PREV_WORKSPACE,
+    ACT_SWITCH_WORKSPACE,   /* iarg = workspace index */
+    ACT_SEND_TO_WORKSPACE,  /* iarg = workspace index */
+    ACT_FOCUS_DIR,          /* sarg = "left"|"right"|"up"|"down" */
+    ACT_MOVE_WIN_DIR,       /* sarg = "left"|"right"|"up"|"down" */
+} Action;
+
+typedef struct {
+    KeySym      key;
+    unsigned    mod;        /* required modifiers (e.g. Mod4Mask, Mod4Mask|ShiftMask, 0) */
+    Action      action;
+    int         iarg;
+    const char *sarg;
+} Keybind;
+
+#define MAX_BINDINGS 64
+
+static Keybind keybinds[] = {
+    /* F-keys — no modifier */
+    { XK_F1,     0,                      ACT_PREV_TAB,          0, NULL },
+    { XK_F2,     0,                      ACT_NEXT_TAB,          0, NULL },
+    { XK_F3,     0,                      ACT_PREV_WORKSPACE,    0, NULL },
+    { XK_F4,     0,                      ACT_NEXT_WORKSPACE,    0, NULL },
+    { XK_F6,     0,                      ACT_CLOSE_WINDOW,      0, NULL },
+    { XK_F7,     0,                      ACT_SPAWN,             0, F7_LAUNCHER_CMD },
+    { XK_F8,     0,                      ACT_SPAWN,             0, FM_CMD },
+    { XK_F9,     0,                      ACT_SPAWN,             0, WWW_CMD },
+
+    /* Mod4 — plain */
+    { XK_Return, Mod4Mask,               ACT_SPAWN,             0, TERMINAL_CMD },
+    { XK_h,      Mod4Mask,               ACT_SPLIT,             1, NULL },  /* horizontal */
+    { XK_v,      Mod4Mask,               ACT_SPLIT,             0, NULL },  /* vertical */
+    { XK_d,      Mod4Mask,               ACT_REMOVE_SPLIT,      0, NULL },
+    { XK_q,      Mod4Mask,               ACT_QUIT,              0, NULL },
+    { XK_comma,  Mod4Mask,               ACT_MOVE_TAB_BWD,      0, NULL },
+    { XK_period, Mod4Mask,               ACT_MOVE_TAB_FWD,      0, NULL },
+
+    /* Mod4 — arrows */
+    { XK_Left,   Mod4Mask,               ACT_FOCUS_DIR,         0, "left" },
+    { XK_Right,  Mod4Mask,               ACT_FOCUS_DIR,         0, "right" },
+    { XK_Up,     Mod4Mask,               ACT_FOCUS_DIR,         0, "up" },
+    { XK_Down,   Mod4Mask,               ACT_FOCUS_DIR,         0, "down" },
+
+    /* Mod4+Shift — split with move */
+    { XK_h,      Mod4Mask | ShiftMask,   ACT_SPLIT,             3, NULL },  /* horizontal + move */
+    { XK_v,      Mod4Mask | ShiftMask,   ACT_SPLIT,             2, NULL },  /* vertical + move */
+
+    /* Mod4+Shift — arrows */
+    { XK_Left,   Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "left" },
+    { XK_Right,  Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "right" },
+    { XK_Up,     Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "up" },
+    { XK_Down,   Mod4Mask | ShiftMask,   ACT_MOVE_WIN_DIR,      0, "down" },
+
+    /* Mod4 + number — switch workspace */
+    { XK_1,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  0, NULL },
+    { XK_2,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  1, NULL },
+    { XK_3,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  2, NULL },
+    { XK_4,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  3, NULL },
+    { XK_5,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  4, NULL },
+    { XK_6,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  5, NULL },
+    { XK_7,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  6, NULL },
+    { XK_8,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  7, NULL },
+    { XK_9,      Mod4Mask,               ACT_SWITCH_WORKSPACE,  8, NULL },
+
+    /* Mod4+Shift + number — send to workspace */
+    { XK_1,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 0, NULL },
+    { XK_2,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 1, NULL },
+    { XK_3,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 2, NULL },
+    { XK_4,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 3, NULL },
+    { XK_5,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 4, NULL },
+    { XK_6,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 5, NULL },
+    { XK_7,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 6, NULL },
+    { XK_8,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 7, NULL },
+    { XK_9,      Mod4Mask | ShiftMask,   ACT_SEND_TO_WORKSPACE, 8, NULL },
+};
+
+static int n_keybinds = (int)(sizeof(keybinds) / sizeof(keybinds[0]));
+
+/* Mask out NumLock (Mod2Mask) and CapsLock (LockMask) for matching */
+#define CLEAN_MASK(m)  ((m) & ~(Mod2Mask | LockMask))
+
 /* EWMH check window */
 static Window ewmh_check_win;
 
@@ -1671,78 +1765,55 @@ static void on_client_message(XEvent *ev)
 static void on_key_press(XEvent *ev)
 {
     KeySym ks = XLookupKeysym(&ev->xkey, 0);
-    int shifted = !!(ev->xkey.state & ShiftMask);
+    unsigned state = CLEAN_MASK(ev->xkey.state);
 
-    if (ks == XK_F3) { action_prev_workspace(); return; }
-    if (ks == XK_F4) { action_next_workspace(); return; }
-    if (ks == XK_F6) { action_close_window(); return; }
-    if (ks == XK_F7) { action_spawn_cmd(F7_LAUNCHER_CMD); return; }
-    if (ks == XK_Return) { action_spawn_cmd(TERMINAL_CMD); return; }
-    if (ks == XK_F8) { action_spawn_cmd(FM_CMD); return; }
-    if (ks == XK_F9) { action_spawn_cmd(WWW_CMD); return; }
+    for (int i = 0; i < n_keybinds; i++) {
+        if (keybinds[i].key != ks) continue;
+        if (CLEAN_MASK(keybinds[i].mod) != state) continue;
 
-    if (ks == XK_h)  { action_split(1, shifted); return; }
-    if (ks == XK_v)  { action_split(0, shifted); return; }
-    if (ks == XK_d && !shifted) { action_remove_split(); return; }
-
-    if (ks == XK_F2) { action_next_tab(); return; }
-    if (ks == XK_F1) { action_prev_tab(); return; }
-
-    if (ks == XK_Left)  { if (shifted) action_move_window_direction("left");  else action_focus_direction("left");  return; }
-    if (ks == XK_Right) { if (shifted) action_move_window_direction("right"); else action_focus_direction("right"); return; }
-    if (ks == XK_Up)    { if (shifted) action_move_window_direction("up");    else action_focus_direction("up");    return; }
-    if (ks == XK_Down)  { if (shifted) action_move_window_direction("down");  else action_focus_direction("down");  return; }
-
-    KeySym num_syms[9] = { XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9 };
-    for (int i = 0; i < 9; i++) {
-        if (ks == num_syms[i]) {
-            if (shifted) action_send_to_workspace(i);
-            else         action_switch_workspace(i);
-            return;
+        switch (keybinds[i].action) {
+            case ACT_SPAWN:             action_spawn_cmd(keybinds[i].sarg); break;
+            case ACT_SPLIT:             action_split(keybinds[i].iarg & 1, keybinds[i].iarg & 2); break;
+            case ACT_REMOVE_SPLIT:      action_remove_split(); break;
+            case ACT_CLOSE_WINDOW:      action_close_window(); break;
+            case ACT_QUIT:              action_quit(); break;
+            case ACT_NEXT_TAB:          action_next_tab(); break;
+            case ACT_PREV_TAB:          action_prev_tab(); break;
+            case ACT_MOVE_TAB_FWD:      action_move_tab_forward(); break;
+            case ACT_MOVE_TAB_BWD:      action_move_tab_backward(); break;
+            case ACT_NEXT_WORKSPACE:    action_next_workspace(); break;
+            case ACT_PREV_WORKSPACE:    action_prev_workspace(); break;
+            case ACT_SWITCH_WORKSPACE:  action_switch_workspace(keybinds[i].iarg); break;
+            case ACT_SEND_TO_WORKSPACE: action_send_to_workspace(keybinds[i].iarg); break;
+            case ACT_FOCUS_DIR:         action_focus_direction(keybinds[i].sarg); break;
+            case ACT_MOVE_WIN_DIR:      action_move_window_direction(keybinds[i].sarg); break;
         }
+        return;
     }
-
-    if (ks == XK_q)      { action_quit(); return; }
-    if (ks == XK_period) { action_move_tab_forward(); return; }
-    if (ks == XK_comma)  { action_move_tab_backward(); return; }
 }
 
 /* ===== Grab keys ===== */
 
 static void grab_keys(void)
 {
-    KeySym mod4_keys[] = {
-        XK_Return, XK_h, XK_v, XK_d, XK_q,
-        XK_Left, XK_Right, XK_Up, XK_Down,
-        XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
-        XK_comma, XK_period,
-    };
-    int n_mod4 = (int)(sizeof(mod4_keys)/sizeof(mod4_keys[0]));
+    /* Ungrab everything first (safe for initial call and future reload) */
+    XUngrabKey(dpy, AnyKey, AnyModifier, root_win);
 
-    for (int i = 0; i < n_mod4; i++) {
-        KeyCode kc = XKeysymToKeycode(dpy, mod4_keys[i]);
+    /* NumLock/CapsLock modifier variants to grab for each binding */
+    unsigned lock_mods[] = { 0, Mod2Mask, LockMask, Mod2Mask | LockMask };
+    int n_lock = (int)(sizeof(lock_mods) / sizeof(lock_mods[0]));
+
+    for (int i = 0; i < n_keybinds; i++) {
+        KeyCode kc = XKeysymToKeycode(dpy, keybinds[i].key);
         if (!kc) continue;
-        XGrabKey(dpy, kc, Mod4Mask,                        root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, Mod4Mask | Mod2Mask,             root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, Mod4Mask | LockMask,             root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, Mod4Mask | ShiftMask,            root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, Mod4Mask | ShiftMask | Mod2Mask, root_win, True, GrabModeAsync, GrabModeAsync);
+        for (int j = 0; j < n_lock; j++)
+            XGrabKey(dpy, kc, keybinds[i].mod | lock_mods[j],
+                     root_win, True, GrabModeAsync, GrabModeAsync);
     }
 
     /* Button1 on root for tab-bar clicks */
     XGrabButton(dpy, Button1, AnyModifier, root_win, True,
                 ButtonPressMask, GrabModeSync, GrabModeAsync, None, None);
-
-    KeySym fkeys[] = { XK_F1, XK_F2, XK_F3, XK_F4, XK_F6, XK_F7, XK_F8, XK_F9 };
-    int n_fk = (int)(sizeof(fkeys)/sizeof(fkeys[0]));
-    for (int i = 0; i < n_fk; i++) {
-        KeyCode kc = XKeysymToKeycode(dpy, fkeys[i]);
-        if (!kc) continue;
-        XGrabKey(dpy, kc, 0,                       root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, Mod2Mask,                root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, LockMask,                root_win, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, kc, Mod2Mask | LockMask,     root_win, True, GrabModeAsync, GrabModeAsync);
-    }
 }
 
 /* ===== Main ===== */
