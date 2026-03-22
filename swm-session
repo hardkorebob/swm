@@ -1,4 +1,4 @@
 #!/bin/sh
 # SWM session launcher — called by LightDM / display manager.
-
+nite
 exec swm
