@@ -29,8 +29,7 @@ cc -O2 -o swm swm.c -lX11
 
 ## Install
 
-Copy to your `$PATH`: `swm` and `swmctl`(requires `socat`). `swm.desktop` file goes in `/usr/share/xsessions`
-
+Copy to your `$PATH`: `swm swm-session swmctl`(requires `socat`). `swm.desktop` file goes in `/usr/share/xsessions`. `chmod +x swm-session swmctl`
 
 
 ## Configuration
