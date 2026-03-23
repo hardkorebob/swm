@@ -57,55 +57,112 @@ Pipe mode: `echo "next-tab" | swmctl -`
 
 Its a weird example but no less fun!
 
-## Keybindings
+## Config
 
-### No modifier
+```
+# SWM configuration
+# Place at: ~/.config/swm/config
+# Reload:   kill -HUP $(pidof swm)
+#      or:  swmctl reload
 
-| Key | Action            |
-|----|--------------------|
-| F1 | Previous tab       |
-| F2 | Next tab           |
-| F3 | Previous workspace |
-| F4 | Next workspace     |
-| F6 | Close window       |
-| F7 | Launcher           |
-| F8 | File manager       |
-| F9 | Browser            |
-| F10 | Terminal          |
+# ===== Keys ======
 
-### Mod4 (Super)
+bind = F1                  prev_tab
+bind = F2                  next_tab
+bind = F3                  prev_ws
+bind = F4                  next_ws
+bind = F6                  close
+bind = F7                  spawn launcher
+bind = F8                  spawn file_manager
+bind = F9                  spawn browser
+bind = F10                 spawn terminal
+bind = Mod4+r              spawn reload
+bind = Mod4+h              split_h
+bind = Mod4+v              split_v
+bind = Mod4+d              remove_split
+bind = Mod4+q              quit
+bind = Mod4+comma          move_tab_bwd
+bind = Mod4+period         move_tab_fwd
+bind = Mod4+Left           focus left
+bind = Mod4+Right          focus right
+bind = Mod4+Up             focus up
+bind = Mod4+Down           focus down
+bind = Mod4+Shift+h        split_h_move
+bind = Mod4+Shift+v        split_v_move
+bind = Mod4+Shift+Left     move_win left
+bind = Mod4+Shift+Right    move_win right
+bind = Mod4+Shift+Up       move_win up
+bind = Mod4+Shift+Down     move_win down
+bind = Mod4+1              switch_ws 1
+bind = Mod4+2              switch_ws 2
+bind = Mod4+3              switch_ws 3
+bind = Mod4+4              switch_ws 4
+bind = Mod4+5              switch_ws 5
+bind = Mod4+6              switch_ws 6
+bind = Mod4+7              switch_ws 7
+bind = Mod4+8              switch_ws 8
+bind = Mod4+9              switch_ws 9
+bind = Mod4+Shift+1        send_to_ws 1
+bind = Mod4+Shift+2        send_to_ws 2
+bind = Mod4+Shift+3        send_to_ws 3
+bind = Mod4+Shift+4        send_to_ws 4
+bind = Mod4+Shift+5        send_to_ws 5
+bind = Mod4+Shift+6        send_to_ws 6
+bind = Mod4+Shift+7        send_to_ws 7
+bind = Mod4+Shift+8        send_to_ws 8
+bind = Mod4+Shift+9        send_to_ws 9
 
-| Mod4+Key | Action            |
-|----------|-------------------|
-| r | Reload config            |
-| h | Split horizontal         |
-| v | Split vertical           |
-| d | Remove split             |
-| q | Quit                     |
-| , | Move tab backward        |
-| . | Move tab forward         |
-| Arrows | Raise adjacent tile |
-| 1-9    | Switch workspace    |
+# ===== Geometry =====
+# 0 = bottom, 1 = top
 
-### Mod4+Shift
+tab_bar_height      = 18
+border_width        = 1
+border_gap          = 2
+statusbar_pos       = 0        
+statusbar_height    = 24
+timebar_pos         = 1        
+timebar_height      = 16
+bar_update_interval = 1.0
 
-| Key | Action                          |
-|-----|---------------------------------|
-| h | Split horizontal + move window    |
-| v | Split vertical + move window      |
-| Arrows | Move window to adjacent tile |
-| 1-9 | Send window to workspace        |
+# ===== Commands =====
 
+terminal     = xterm
+file_manager = thunar
+browser      = firefox
+launcher     = dmenu_run
 
-### Dimensions
+# ===== Colours — status bar =====
 
-| Key                 | Default | Description                      |
-|-----------------------|-----|------------------------------------|
-| `tab_bar_height`      | 22  |  Height of tab bars in pixels      |
-| `border_width`        | 1   |  Border width around tiles         |
-| `border_gap`          | 2   |  Gap between tiles                 |
-| `statusbar_height`    | 24  |  Status bar height (0 to disable)  |
-| `statusbar_pos`       | 0   |  0 = bottom, 1 = top               |
-| `timebar_height`      | 14  |  Hex-time bar height               |
-| `timebar_pos`         | 1   |  0 = bottom, 1 = top               |
-| `bar_update_interval` | 1.0 |  Bar refresh interval in seconds   |
+col_statusbar_bg          = #1E1E1E
+col_statusbar_fg          = #FFBF00
+col_statusbar_ws_active   = #fbe7ac
+col_statusbar_ws_inactive = #555555
+col_statusbar_ws_occupied = #888888
+col_statusbar_ws_fg_act   = #000000
+col_statusbar_ws_fg_inact = #AAAAAA
+
+# ===== Colours — tab bar =====
+
+col_tab_active_bg     = #fbe7ac
+col_tab_inactive_bg   = #3C3C3C
+col_tab_active_fg     = #000000
+col_tab_inactive_fg   = #AAAAAA
+col_tab_bar_bg        = #2B2B2B
+col_tab_active_bg_dim = #555555    
+col_tab_active_fg_dim = #CCCCCC
+
+# ===== Colours — borders / desktop =====
+
+col_border_active   = #696969
+col_border_inactive = #1E1E1E
+col_desktop_bg      = #000000
+
+# ===== Colours — bottom hex-time bar =====
+
+col_timebar_bg     = #1E1E1E
+col_timebar_hour   = #CC3300
+col_timebar_hex    = #00CC66
+col_timebar_hseg   = #CCAA00
+col_timebar_label  = #FFFFFF
+col_timebar_track  = #333333
+```
