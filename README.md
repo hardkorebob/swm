@@ -64,6 +64,7 @@ Its a weird example but no less fun!
 # Place at: ~/.config/swm/config
 # Reload:   kill -HUP $(pidof swm)
 #      or:  swmctl reload
+#      or:  Mod4+r
 
 # ===== Keys ======
 
