@@ -1,6 +1,6 @@
 # SWM
 
-A tabbed manual-tiling window manager for X11. No dependencies beyond Xlib. Inspired by Notion and TinyWM.
+A scriptable tabbed manual-tiling window manager for X11. No dependencies beyond Xlib. Inspired by Notion and TinyWM.
 
 ![Screenshot](scrot.png)
 
