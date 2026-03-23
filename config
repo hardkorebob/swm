@@ -53,7 +53,7 @@ bind = Mod4+Shift+8        send_to_ws 8
 bind = Mod4+Shift+9        send_to_ws 9
 
 # ===== Geometry =====
-# 0 = bottom, 1 = top
+# 0 = bottom, 1 = top (bar_pos)
 
 tab_bar_height      = 18
 border_width        = 1
