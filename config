@@ -53,13 +53,13 @@ bind = Mod4+Shift+9        send_to_ws 9
 # ===== Geometry =====
 # 0 = bottom, 1 = top
 
-tab_bar_height      = 20
+tab_bar_height      = 18
 border_width        = 1
 border_gap          = 2
 statusbar_pos       = 0        
 statusbar_height    = 24
 timebar_pos         = 1        
-timebar_height      = 14
+timebar_height      = 16
 bar_update_interval = 1.0
 
 # ===== Commands =====
@@ -98,7 +98,7 @@ col_desktop_bg      = #000000
 # ===== Colours — bottom hex-time bar =====
 
 col_timebar_bg     = #1E1E1E
-col_timebar_hour    = #CC3300
+col_timebar_hour   = #CC3300
 col_timebar_hex    = #00CC66
 col_timebar_hseg   = #CCAA00
 col_timebar_label  = #FFFFFF
