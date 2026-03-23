@@ -1,6 +1,5 @@
 /*
- * SWM — A tabbed tiling window manager inspired by Notion and TinyWM.
- *   cc -O2 -o swm swm.c -lX11
+ * SWM — A scriptable tabbed tiling window manager inspired by Notion and TinyWM.
  */
 
 #include <X11/Xlib.h>
