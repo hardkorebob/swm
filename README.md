@@ -29,7 +29,7 @@ Requires `libX11-dev` library & `-misc-fixed-medium-r-*-*-13-*-*-*-*-*-iso8859-1
 
 ## IPC & swmctl
 
-`I said: The real gold of this project is the scripting. You can make a script where the colors change at a certain interval giving the whole desktop a breathing-like, life-like quality. Think about it. It can also make orchestrating custom layouts a breeze. You could even make a small automated "demo" of all the applications of the computer using this socket scripting capapbility. What do you think? Outline your findings`
+`I said: The real gold of this project is the scripting. You can make a script where the colors change at a certain interval giving the whole desktop a breathing-like, life-like quality. Think about it. It can also make orchestrating custom layouts a breeze. You could even make a small automated "demo" of all the applications of the computer using this socket scripting capability. What do you think? Outline your findings`
 
 **Claude said:** A UNIX socket at /tmp/swm.sock, newline-delimited text commands, with synchronous ok/err: replies. Any language that can open a socket can drive it. Even `socat` or `nc` works one-shot from the shell.
 
