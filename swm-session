@@ -2,4 +2,4 @@
 # SWM session launcher — called by LightDM / display manager.
 # Startup programs can go here
 # redshift -O 4000
-exec swm
+exec swm 2> $HOME/.config/swm/error.log
