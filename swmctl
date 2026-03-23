@@ -30,7 +30,8 @@
 #   query win-count     Print window count in active tile
 #   query win-title     Print active window's title
 #   query layout        Print tile count in current workspace
-#
+#   set <key> <val>     Set (col_statusbar_bg "#00000")
+#   get <key>           Gets current value
 
 set -e
 
