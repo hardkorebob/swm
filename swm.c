@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <time.h>
 
-/* ===== Compile-time limits (not runtime-configurable) ===== */
+
 
 #define NUM_WORKSPACES      9
 #define CMD_SOCK_PATH       "/tmp/swm.sock"
@@ -33,12 +33,12 @@
 #define MAX_COLORS          256
 #define MAX_BINDINGS        64
 
-/* ===== Runtime configuration ===== */
 
-/* Keybinding action types (needed by Config) */
+
+
 typedef enum {
-    ACT_SPAWN,              /* sarg = command */
-    ACT_SPLIT,              /* iarg: bit 0 = horizontal, bit 1 = move window */
+    ACT_SPAWN,              
+    ACT_SPLIT,              
     ACT_REMOVE_SPLIT,
     ACT_CLOSE_WINDOW,
     ACT_QUIT,
@@ -48,22 +48,22 @@ typedef enum {
     ACT_MOVE_TAB_BWD,
     ACT_NEXT_WORKSPACE,
     ACT_PREV_WORKSPACE,
-    ACT_SWITCH_WORKSPACE,   /* iarg = workspace index */
-    ACT_SEND_TO_WORKSPACE,  /* iarg = workspace index */
-    ACT_FOCUS_DIR,          /* sarg = "left"|"right"|"up"|"down" */
-    ACT_MOVE_WIN_DIR,       /* sarg = "left"|"right"|"up"|"down" */
+    ACT_SWITCH_WORKSPACE,   
+    ACT_SEND_TO_WORKSPACE,  
+    ACT_FOCUS_DIR,          
+    ACT_MOVE_WIN_DIR,       
 } Action;
 
 typedef struct {
     KeySym      key;
-    unsigned    mod;        /* required modifiers (e.g. Mod4Mask, Mod4Mask|ShiftMask, 0) */
+    unsigned    mod;        
     Action      action;
     int         iarg;
-    char       *sarg;       /* heap-allocated string arg (direction, custom cmd, etc.) */
+    char       *sarg;       
 } Keybind;
 
 typedef struct {
-    /* Dimensions */
+    
     int    tab_bar_height;
     int    border_width;
     int    border_gap;
@@ -73,14 +73,14 @@ typedef struct {
     int    timebar_height;
     double bar_update_interval;
 
-    /* Commands */
+    
     char terminal_cmd[128];
     char fm_cmd[128];
     char www_cmd[128];
     char launcher_cmd[128];
     char reload_cmd[128];
 
-    /* Colors — status bar */
+    
     char col_statusbar_bg[8];
     char col_statusbar_fg[8];
     char col_statusbar_ws_active[8];
@@ -89,7 +89,7 @@ typedef struct {
     char col_statusbar_ws_fg_act[8];
     char col_statusbar_ws_fg_inact[8];
 
-    /* Colors — tabs */
+    
     char col_tab_active_bg[8];
     char col_tab_inactive_bg[8];
     char col_tab_active_fg[8];
@@ -98,12 +98,12 @@ typedef struct {
     char col_tab_active_bg_dim[8];
     char col_tab_active_fg_dim[8];
 
-    /* Colors — borders & desktop */
+    
     char col_border_active[8];
     char col_border_inactive[8];
     char col_desktop_bg[8];
 
-    /* Colors — bottom hex-time bar */
+    
     char col_timebar_bg[8];
     char col_timebar_hour[8];
     char col_timebar_hex[8];
@@ -111,7 +111,7 @@ typedef struct {
     char col_timebar_label[8];
     char col_timebar_track[8];
 
-    /* Keybindings (runtime-configurable) */
+    
     Keybind binds[MAX_BINDINGS];
     int     n_binds;
 } Config;
@@ -135,15 +135,12 @@ static void cfg_defaults(void)
     cfg.timebar_height  = 14;
     cfg.bar_update_interval = 1.0;
 
-    strncpy(cfg.terminal_cmd, "xterm",     sizeof(cfg.terminal_cmd) - 1);
-    strncpy(cfg.fm_cmd,       "thunar",    sizeof(cfg.fm_cmd) - 1);
-    strncpy(cfg.www_cmd,      "firefox",   sizeof(cfg.www_cmd) - 1);
-    strncpy(cfg.launcher_cmd, "dmenu_run", sizeof(cfg.launcher_cmd) - 1);
-    strncpy(cfg.reload_cmd, "swmctl reload", sizeof(cfg.reload_cmd) - 1);
+    snprintf(cfg.terminal_cmd, sizeof(cfg.terminal_cmd), "%s", "xterm");
+    snprintf(cfg.fm_cmd,       sizeof(cfg.fm_cmd),       "%s", "thunar");
+    snprintf(cfg.www_cmd,      sizeof(cfg.www_cmd),      "%s", "firefox");
+    snprintf(cfg.launcher_cmd, sizeof(cfg.launcher_cmd), "%s", "dmenu_run");
+    snprintf(cfg.reload_cmd,   sizeof(cfg.reload_cmd),   "%s", "swmctl reload");
 
-    /* Color literals are exactly 7 chars + NUL = 8 bytes, matching field size.
-       Use memcpy to copy the full 8 bytes (including NUL) and avoid
-       -Wstringop-truncation from strncpy seeing count == strlen(src). */
     #define SETCOL(dst, lit) memcpy((dst), (lit), 8)
     SETCOL(cfg.col_statusbar_bg,          "#1E1E1E");
     SETCOL(cfg.col_statusbar_fg,          "#FFBF00");
@@ -173,66 +170,70 @@ static void cfg_defaults(void)
     SETCOL(cfg.col_timebar_track, "#333333");
     #undef SETCOL
 
-    /* Default keybindings */
-    /* Free any previous sarg allocations before resetting binds */
+    
+    
     for (int i = 0; i < cfg.n_binds; i++) free(cfg.binds[i].sarg);
     cfg.n_binds = 0;
+}
+
+static void cfg_default_binds(void)
+{
     #define B(k, m, a, i, s) do { \
         Keybind *b = &cfg.binds[cfg.n_binds++]; \
         b->key = (k); b->mod = (m); b->action = (a); b->iarg = (i); \
         b->sarg = NULL; sarg_set(&b->sarg, (s)); \
     } while(0)
 
-    /* F-keys — no modifier */
+    
     B(XK_F1, 0, ACT_PREV_TAB,       0, NULL);
     B(XK_F2, 0, ACT_NEXT_TAB,       0, NULL);
     B(XK_F3, 0, ACT_PREV_WORKSPACE, 0, NULL);
     B(XK_F4, 0, ACT_NEXT_WORKSPACE, 0, NULL);
     B(XK_F6, 0, ACT_CLOSE_WINDOW,   0, NULL);
-    B(XK_F7, 0, ACT_SPAWN,          3, NULL);  /* launcher */
-    B(XK_F8, 0, ACT_SPAWN,          1, NULL);  /* file manager */
-    B(XK_F9, 0, ACT_SPAWN,          2, NULL);  /* browser */
+    B(XK_F7, 0, ACT_SPAWN,          3, NULL);  
+    B(XK_F8, 0, ACT_SPAWN,          1, NULL);  
+    B(XK_F9, 0, ACT_SPAWN,          2, NULL);  
     
-    /* Mod4 — plain */
-    B(XK_Return, Mod4Mask, ACT_SPAWN,        0, NULL);  /* terminal */
-    B(XK_h,      Mod4Mask, ACT_SPLIT,        1, NULL);  /* horizontal */
-    B(XK_v,      Mod4Mask, ACT_SPLIT,        0, NULL);  /* vertical */
+    
+    B(XK_Return, Mod4Mask, ACT_SPAWN,        0, NULL);  
+    B(XK_h,      Mod4Mask, ACT_SPLIT,        1, NULL);  
+    B(XK_v,      Mod4Mask, ACT_SPLIT,        0, NULL);  
     B(XK_d,      Mod4Mask, ACT_REMOVE_SPLIT, 0, NULL);
     B(XK_q,      Mod4Mask, ACT_QUIT,         0, NULL);
     B(XK_comma,  Mod4Mask, ACT_MOVE_TAB_BWD, 0, NULL);
     B(XK_period, Mod4Mask, ACT_MOVE_TAB_FWD, 0, NULL);
-    B(XK_r,      Mod4Mask, ACT_SPAWN,        4, NULL);  /*reload*/
+    B(XK_r,      Mod4Mask, ACT_SPAWN,        4, NULL);  
 
-    /* Mod4 — arrows */
+    
     B(XK_Left,  Mod4Mask, ACT_FOCUS_DIR, 0, "left");
     B(XK_Right, Mod4Mask, ACT_FOCUS_DIR, 0, "right");
     B(XK_Up,    Mod4Mask, ACT_FOCUS_DIR, 0, "up");
     B(XK_Down,  Mod4Mask, ACT_FOCUS_DIR, 0, "down");
 
-    /* Mod4+Shift — split with move */
-    B(XK_h, Mod4Mask|ShiftMask, ACT_SPLIT, 3, NULL);  /* horizontal + move */
-    B(XK_v, Mod4Mask|ShiftMask, ACT_SPLIT, 2, NULL);  /* vertical + move */
+    
+    B(XK_h, Mod4Mask|ShiftMask, ACT_SPLIT, 3, NULL);  
+    B(XK_v, Mod4Mask|ShiftMask, ACT_SPLIT, 2, NULL);  
 
-    /* Mod4+Shift — arrows */
+    
     B(XK_Left,  Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "left");
     B(XK_Right, Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "right");
     B(XK_Up,    Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "up");
     B(XK_Down,  Mod4Mask|ShiftMask, ACT_MOVE_WIN_DIR, 0, "down");
 
-    /* Mod4 + number — switch workspace */
+    
     for (int i = 0; i < 9; i++)
         B(XK_1 + i, Mod4Mask, ACT_SWITCH_WORKSPACE, i, NULL);
 
-    /* Mod4+Shift + number — send to workspace */
+    
     for (int i = 0; i < 9; i++)
         B(XK_1 + i, Mod4Mask|ShiftMask, ACT_SEND_TO_WORKSPACE, i, NULL);
 
     #undef B
 }
 
-/* ===== Keybinding config parser ===== */
 
-/* Strip surrounding single or double quotes from a string in-place. */
+
+
 static void strip_quotes(char *s)
 {
     size_t len = strlen(s);
@@ -243,7 +244,7 @@ static void strip_quotes(char *s)
     }
 }
 
-/* Map modifier name → X mask.  Returns 0 if unrecognised. */
+
 static unsigned parse_mod_token(const char *s)
 {
     if (strcmp(s, "Mod4")    == 0 || strcmp(s, "Super") == 0) return Mod4Mask;
@@ -256,7 +257,7 @@ static unsigned parse_mod_token(const char *s)
     return 0;
 }
 
-/* Action name → enum mapping */
+
 static const struct { const char *name; Action act; } action_map[] = {
     { "spawn",          ACT_SPAWN },
     { "split_h",        ACT_SPLIT },
@@ -279,7 +280,7 @@ static const struct { const char *name; Action act; } action_map[] = {
     { NULL, 0 }
 };
 
-/* Resolve the iarg for split actions by name */
+
 static int split_iarg(const char *name)
 {
     if (strcmp(name, "split_h")      == 0) return 1;
@@ -289,8 +290,7 @@ static int split_iarg(const char *name)
     return 0;
 }
 
-/* Resolve the iarg for spawn: "terminal"=0, "file_manager"=1, "browser"=2, "launcher"=3,
-   or -1 meaning sarg holds a custom command. */
+
 static int spawn_slot(const char *arg)
 {
     if (strcmp(arg, "terminal")     == 0) return 0;
@@ -298,7 +298,7 @@ static int spawn_slot(const char *arg)
     if (strcmp(arg, "browser")      == 0) return 2;
     if (strcmp(arg, "launcher")     == 0) return 3;
     if (strcmp(arg, "reload")       == 0) return 4;
-    return -1;  /* custom command */
+    return -1;  
 }
 
 static int cfg_parse_bind(const char *val)
@@ -312,7 +312,7 @@ static int cfg_parse_bind(const char *val)
     strncpy(buf, val, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
 
-    /* Split into: chord, action_name, arg (rest of line) */
+    
     char *chord = buf;
     while (*chord == ' ' || *chord == '\t') chord++;
 
@@ -330,7 +330,7 @@ static int cfg_parse_bind(const char *val)
         *sp++ = '\0';
         while (*sp == ' ' || *sp == '\t') sp++;
         if (*sp) arg = sp;
-        /* trim trailing whitespace from arg */
+        
         if (arg) {
             char *e = arg + strlen(arg) - 1;
             while (e > arg && (*e == ' ' || *e == '\t')) *e-- = '\0';
@@ -338,7 +338,7 @@ static int cfg_parse_bind(const char *val)
         }
     }
 
-    /* --- Parse chord: Mod4+Shift+Return → mod mask + keysym --- */
+    
     unsigned mod = 0;
     KeySym ks = NoSymbol;
     {
@@ -346,7 +346,7 @@ static int cfg_parse_bind(const char *val)
         strncpy(chord_buf, chord, sizeof(chord_buf) - 1);
         chord_buf[sizeof(chord_buf) - 1] = '\0';
 
-        /* Split on '+' and process tokens */
+        
         char *tokens[8];
         int ntok = 0;
         char *t = strtok(chord_buf, "+");
@@ -354,7 +354,7 @@ static int cfg_parse_bind(const char *val)
 
         if (ntok == 0) { fprintf(stderr, "swm: bind: empty chord in '%s'\n", val); return 0; }
 
-        /* Last token is the key, preceding tokens are modifiers */
+        
         for (int i = 0; i < ntok - 1; i++) {
             unsigned m = parse_mod_token(tokens[i]);
             if (!m) { fprintf(stderr, "swm: bind: unknown modifier '%s'\n", tokens[i]); return 0; }
@@ -368,7 +368,7 @@ static int cfg_parse_bind(const char *val)
         }
     }
 
-    /* --- Parse action --- */
+    
     Action action = (Action)-1;
     for (int i = 0; action_map[i].name; i++) {
         if (strcmp(act_name, action_map[i].name) == 0) {
@@ -381,7 +381,7 @@ static int cfg_parse_bind(const char *val)
         return 0;
     }
 
-    /* --- Build the Keybind entry --- */
+    
     Keybind *b = &cfg.binds[cfg.n_binds];
     memset(b, 0, sizeof(*b));
     b->key = ks;
@@ -398,7 +398,7 @@ static int cfg_parse_bind(const char *val)
                 if (slot >= 0) {
                     b->iarg = slot;
                 } else {
-                    /* Custom command in sarg */
+                    
                     b->iarg = -1;
                     sarg_set(&b->sarg, arg);
                 }
@@ -406,7 +406,7 @@ static int cfg_parse_bind(const char *val)
             break;
         case ACT_SWITCH_WORKSPACE:
         case ACT_SEND_TO_WORKSPACE:
-            if (arg) b->iarg = atoi(arg) - 1;  /* config uses 1-9, internal uses 0-8 */
+            if (arg) b->iarg = atoi(arg) - 1;  
             if (b->iarg < 0) b->iarg = 0;
             if (b->iarg >= NUM_WORKSPACES) b->iarg = NUM_WORKSPACES - 1;
             break;
@@ -422,9 +422,9 @@ static int cfg_parse_bind(const char *val)
     return 1;
 }
 
-/* ===== Config file parser ===== */
 
-/* Resolve config file path.  Returns 1 if found, 0 if not. */
+
+
 static int cfg_resolve_path(char *out, int len)
 {
     const char *env;
@@ -440,9 +440,9 @@ static int cfg_resolve_path(char *out, int len)
     return 0;
 }
 
-/* Parse a single key=value pair into cfg.  Returns 1 if recognised, 0 if not. */
 
-/* Color config name → offset table (used by set and get) */
+
+
 static const struct { const char *name; size_t off; } col_map[] = {
     { "col_statusbar_bg",          offsetof(Config, col_statusbar_bg) },
     { "col_statusbar_fg",          offsetof(Config, col_statusbar_fg) },
@@ -470,28 +470,53 @@ static const struct { const char *name; size_t off; } col_map[] = {
     { NULL, 0 }
 };
 
+typedef enum { CFG_INT, CFG_DOUBLE } CfgNumKind;
+
+static const struct { const char *name; size_t off; CfgNumKind kind; } num_map[] = {
+    { "tab_bar_height",      offsetof(Config, tab_bar_height),      CFG_INT },
+    { "border_width",        offsetof(Config, border_width),        CFG_INT },
+    { "border_gap",          offsetof(Config, border_gap),          CFG_INT },
+    { "statusbar_height",    offsetof(Config, statusbar_height),    CFG_INT },
+    { "statusbar_pos",       offsetof(Config, statusbar_pos),       CFG_INT },
+    { "timebar_pos",         offsetof(Config, timebar_pos),         CFG_INT },
+    { "timebar_height",      offsetof(Config, timebar_height),      CFG_INT },
+    { "bar_update_interval", offsetof(Config, bar_update_interval), CFG_DOUBLE },
+    { NULL, 0, 0 }
+};
+
+static const struct { const char *name; size_t off; size_t size; } str_map[] = {
+    { "terminal",     offsetof(Config, terminal_cmd), sizeof(((Config *)0)->terminal_cmd) },
+    { "file_manager", offsetof(Config, fm_cmd),       sizeof(((Config *)0)->fm_cmd) },
+    { "browser",      offsetof(Config, www_cmd),      sizeof(((Config *)0)->www_cmd) },
+    { "launcher",     offsetof(Config, launcher_cmd), sizeof(((Config *)0)->launcher_cmd) },
+    { "reload",       offsetof(Config, reload_cmd),   sizeof(((Config *)0)->reload_cmd) },
+    { NULL, 0, 0 }
+};
+
 static int cfg_set_kv(const char *key, const char *val)
 {
-    /* Integers */
-    if (strcmp(key, "tab_bar_height") == 0)        { cfg.tab_bar_height      = atoi(val); return 1; }
-    if (strcmp(key, "border_width") == 0)          { cfg.border_width        = atoi(val); return 1; }
-    if (strcmp(key, "border_gap") == 0)            { cfg.border_gap          = atoi(val); return 1; }
-    if (strcmp(key, "statusbar_height") == 0)      { cfg.statusbar_height    = atoi(val); return 1; }
-    if (strcmp(key, "statusbar_pos") == 0)         { cfg.statusbar_pos       = atoi(val); return 1; }
-    if (strcmp(key, "timebar_pos") == 0)           { cfg.timebar_pos         = atoi(val); return 1; }
-    if (strcmp(key, "timebar_height") == 0)        { cfg.timebar_height      = atoi(val); return 1; }
-    if (strcmp(key, "bar_update_interval") == 0)   { cfg.bar_update_interval = atof(val); return 1; }
+    
+    for (int i = 0; num_map[i].name; i++) {
+        if (strcmp(key, num_map[i].name) == 0) {
+            if (num_map[i].kind == CFG_DOUBLE)
+                *(double *)((char *)&cfg + num_map[i].off) = atof(val);
+            else
+                *(int *)((char *)&cfg + num_map[i].off) = atoi(val);
+            return 1;
+        }
+    }
 
-    /* Commands */
-    if (strcmp(key, "terminal") == 0)     { strncpy(cfg.terminal_cmd, val, sizeof(cfg.terminal_cmd) - 1); return 1; }
-    if (strcmp(key, "file_manager") == 0) { strncpy(cfg.fm_cmd,       val, sizeof(cfg.fm_cmd) - 1);       return 1; }
-    if (strcmp(key, "browser") == 0)      { strncpy(cfg.www_cmd,      val, sizeof(cfg.www_cmd) - 1);      return 1; }
-    if (strcmp(key, "launcher") == 0)     { strncpy(cfg.launcher_cmd, val, sizeof(cfg.launcher_cmd) - 1); return 1; }
-    if (strcmp(key, "reload") == 0)       { strncpy(cfg.reload_cmd,   val, sizeof(cfg.reload_cmd) - 1);   return 1; }
-    /* Keybindings — appends to current binds array (caller handles clear-on-first) */
+    
+    for (int i = 0; str_map[i].name; i++) {
+        if (strcmp(key, str_map[i].name) == 0) {
+            snprintf((char *)&cfg + str_map[i].off, str_map[i].size, "%s", val);
+            return 1;
+        }
+    }
+    
     if (strcmp(key, "bind") == 0) return cfg_parse_bind(val);
 
-    /* Colors — validate: must start with # and be 7 chars escape: with swmctl set col_statusbar_bg "#FF0000" "*/
+    
     if (val[0] != '#' || strlen(val) < 7) return 0;
 
     for (int i = 0; col_map[i].name; i++) {
@@ -505,55 +530,46 @@ static int cfg_set_kv(const char *key, const char *val)
     return 0;
 }
 
-/* Parse config file.  Returns number of keys set, or -1 on open failure. */
+
 static int cfg_load(const char *path)
 {
     FILE *f = fopen(path, "r");
     if (!f) return -1;
 
-    int seen_bind = 0;  /* replace-all: first bind line clears defaults */
-
     char line[512];
     int lineno = 0, count = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
-        /* Strip newline */
+        
         char *nl = strchr(line, '\n');
         if (nl) *nl = '\0';
 
-        /* Skip comments and blank lines */
+        
         char *p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '#' || *p == '\0') continue;
 
-        /* Split on '=' */
+        
         char *eq = strchr(p, '=');
         if (!eq) {
             fprintf(stderr, "swm: config:%d: missing '='\n", lineno);
             continue;
         }
 
-        /* Key: trim trailing whitespace */
+        
         char *kend = eq - 1;
         while (kend > p && (*kend == ' ' || *kend == '\t')) kend--;
         *(kend + 1) = '\0';
 
-        /* Value: trim leading whitespace */
+        
         char *val = eq + 1;
         while (*val == ' ' || *val == '\t') val++;
-        /* Trim trailing whitespace */
+        
         char *vend = val + strlen(val) - 1;
         while (vend > val && (*vend == ' ' || *vend == '\t')) *vend-- = '\0';
 
-        /* Strip surrounding quotes */
+        
         strip_quotes(val);
-
-        /* Replace-all: first bind line wipes default keybindings */
-        if (strcmp(p, "bind") == 0 && !seen_bind) {
-            seen_bind = 1;
-            for (int bi = 0; bi < cfg.n_binds; bi++) free(cfg.binds[bi].sarg);
-            cfg.n_binds = 0;
-        }
 
         if (cfg_set_kv(p, val)) count++;
     }
@@ -561,18 +577,18 @@ static int cfg_load(const char *path)
     return count;
 }
 
-/* SIGHUP handler — sets a flag checked in the event loop */
+
 static volatile sig_atomic_t reload_pending;
-/* Deferred config apply — coalesces batched "set" commands */
-static int apply_pending;
+
+static volatile sig_atomic_t apply_pending;
 
 static void on_sighup(int sig) { (void)sig; reload_pending = 1; }
 
-/* Forward declaration — defined after bar functions exist */
+
 static void cfg_apply(void);
 static void grab_keys(void);
 
-/* ===== Data structures ===== */
+
 
 typedef enum { NODE_TILE, NODE_SPLIT } NodeType;
 
@@ -581,16 +597,16 @@ typedef struct Node {
     int x, y, w, h;
     struct Node *parent;
     union {
-        struct {                        /* NODE_TILE */
-            Window *windows;            /* heap-allocated */
+        struct {                        
+            Window *windows;            
             int    nwindows;
-            int    win_cap;             /* allocated capacity */
+            int    win_cap;             
             int    active_tab;
             Window tab_bar_win;
             Window frame_win;
         } tile;
-        struct {                        /* NODE_SPLIT */
-            int    horizontal;          /* 1 = side-by-side, 0 = top/bottom */
+        struct {                        
+            int    horizontal;          
             double ratio;
             struct Node *children[2];
         } split;
@@ -601,17 +617,17 @@ typedef struct {
     int   sw, sh, tile_y, tile_h;
     Node *root;
     Node *active_tile;
-    Window fullscreen_win;              /* per-workspace fullscreen tracking */
-    /* Cached tile list — avoids repeated tree walks */
+    Window fullscreen_win;              
+    
     Node *cached_tiles[MAX_TILES];
     int   n_cached_tiles;
-    int   tiles_dirty;                  /* 1 = cache needs rebuild */
+    int   tiles_dirty;                  
 } Workspace;
 
 typedef struct { Window wid; int ws; } ManagedEntry;
 typedef struct { char hex[8]; unsigned long px; } ColorEntry;
 
-/* ===== Globals ===== */
+
 
 static Display      *dpy;
 static int           scr_num;
@@ -635,7 +651,7 @@ static Window        frame_wins[MAX_SET];
 static int           n_frame_wins;
 
 static Window        status_bar_win;
-static Window        bottom_bar_win;
+static Window        timebar_win;
 static long          prev_cpu_idle, prev_cpu_total;
 static double        cpu_pct;
 static double        last_bar_update;
@@ -644,7 +660,7 @@ static int           running;
 static ColorEntry    color_cache[MAX_COLORS];
 static int           n_colors;
 
-/* Cached atoms */
+
 static Atom a_net_wm_name, a_utf8, a_wm_protocols, a_wm_delete;
 static Atom a_wm_type, a_wm_type_dock;
 static Atom a_net_wm_state, a_net_wm_state_fullscreen;
@@ -652,26 +668,27 @@ static Atom a_wm_type_splash, a_wm_type_dialog;
 static Atom a_wm_type_tooltip, a_wm_type_notification;
 static Atom a_wm_type_popup_menu;
 
-/* ===== Keybinding helpers ===== */
 
-/* Mask out NumLock (Mod2Mask) and CapsLock (LockMask) for matching */
+
+
 #define CLEAN_MASK(m)  ((m) & ~(Mod2Mask | LockMask))
 
-/* EWMH check window */
+
 static Window ewmh_check_win;
 
-/* Persistent GC for drawing — allocated once, reused everywhere */
+
 static GC draw_gc;
 
-/* Cached bar info — refreshed every BAR_INFO_INTERVAL seconds */
+
 #define BAR_INFO_INTERVAL 180.0
 static int    cached_volume;
 static char   cached_ip[64];
 static double last_bar_info_update;
 
-/* ===== Command socket state ===== */
+
 
 static int cmd_listen_fd = -1;
+static char cmd_sock_path[256];
 
 static struct {
     int  fd;
@@ -681,7 +698,7 @@ static struct {
 
 static int n_cmd_clients;
 
-/* ===== Utility: colour cache ===== */
+
 
 static unsigned long px(const char *hex)
 {
@@ -709,7 +726,7 @@ static unsigned long px(const char *hex)
     return c.pixel;
 }
 
-/* ===== Utility: window-id sets ===== */
+
 
 static int set_contains(const Window *s, int n, Window w)
 {
@@ -726,7 +743,7 @@ static void set_remove(Window *s, int *n, Window w)
         if (s[i] == w) { s[i] = s[--(*n)]; return; }
 }
 
-/* ===== Utility: managed window tracking ===== */
+
 
 static int managed_find(Window wid)
 {
@@ -748,7 +765,7 @@ static void managed_set_ws(Window wid, int ws)
     int i = managed_find(wid); if (i >= 0) managed[i].ws = ws;
 }
 
-/* ===== Utility: tile window list ops ===== */
+
 
 static int tile_has(Node *t, Window w)
 {
@@ -758,9 +775,12 @@ static int tile_has(Node *t, Window w)
 static void tile_add(Node *t, Window w)
 {
     if (t->tile.nwindows >= t->tile.win_cap) {
-        t->tile.win_cap = t->tile.win_cap ? t->tile.win_cap * 2 : 4;
-        t->tile.windows = realloc(t->tile.windows,
-                                  (size_t)t->tile.win_cap * sizeof(Window));
+        int new_cap = t->tile.win_cap ? t->tile.win_cap * 2 : 4;
+        Window *tmp = realloc(t->tile.windows,
+                              (size_t)new_cap * sizeof(Window));
+        if (!tmp) { fprintf(stderr, "swm: tile_add: realloc failed\n"); return; }
+        t->tile.windows = tmp;
+        t->tile.win_cap = new_cap;
     }
     t->tile.windows[t->tile.nwindows++] = w;
 }
@@ -786,7 +806,7 @@ static void tile_clamp_tab(Node *t)
         t->tile.active_tab = t->tile.nwindows > 0 ? t->tile.nwindows - 1 : 0;
 }
 
-/* ===== Utility: client area of a tile ===== */
+
 
 static void tile_client_area(Node *t, int *cx, int *cy, int *cw, int *ch)
 {
@@ -795,20 +815,22 @@ static void tile_client_area(Node *t, int *cx, int *cy, int *cw, int *ch)
     *cw = t->w - 2*(g+b); if (*cw < 1) *cw = 1;
     *ch = t->h - cfg.tab_bar_height - 2*(g+b); if (*ch < 1) *ch = 1;
     if (cfg.statusbar_pos)
-        *cy = t->y + cfg.tab_bar_height + g + b;   /* tab bar on top, client below */
+        *cy = t->y + cfg.tab_bar_height + g + b;   
     else
-        *cy = t->y + g + b;                     /* tab bar on bottom, client above */
+        *cy = t->y + g + b;                     
 }
 
-/* ===== Node creation / tree helpers ===== */
+
 
 static Node *node_new_tile(int x, int y, int w, int h)
 {
     Node *n = calloc(1, sizeof(Node));
+    if (!n) { fprintf(stderr, "swm: node_new_tile: alloc failed\n"); return NULL; }
     n->type = NODE_TILE;
     n->x = x; n->y = y; n->w = w; n->h = h;
     n->tile.win_cap = 4;
     n->tile.windows = calloc((size_t)n->tile.win_cap, sizeof(Window));
+    if (!n->tile.windows) { fprintf(stderr, "swm: node_new_tile: alloc windows failed\n"); free(n); return NULL; }
     n->tile.tab_bar_win = None;
     n->tile.frame_win = None;
     return n;
@@ -817,6 +839,7 @@ static Node *node_new_tile(int x, int y, int w, int h)
 static Node *node_new_split(int horizontal, double ratio)
 {
     Node *n = calloc(1, sizeof(Node));
+    if (!n) { fprintf(stderr, "swm: node_new_split: alloc failed\n"); return NULL; }
     n->type = NODE_SPLIT;
     n->split.horizontal = horizontal;
     n->split.ratio = ratio;
@@ -835,7 +858,7 @@ static void node_free_tree(Node *n)
     free(n);
 }
 
-/* Collect all leaf tiles under *node* into buf. Returns count. */
+
 static int collect_tiles(Node *node, Node **buf, int max)
 {
     if (!node || max <= 0) return 0;
@@ -845,7 +868,7 @@ static int collect_tiles(Node *node, Node **buf, int max)
     return n;
 }
 
-/* Cached tile list — avoids repeated tree walks. */
+
 static void ws_invalidate_tiles(Workspace *w) { w->tiles_dirty = 1; }
 
 static int ws_get_tiles(Workspace *w, Node ***out)
@@ -858,7 +881,7 @@ static int ws_get_tiles(Workspace *w, Node ***out)
     return w->n_cached_tiles;
 }
 
-/* Find tile containing window wid in workspace ws. */
+
 static Node *ws_find_tile(Workspace *w, Window wid)
 {
     Node **tiles; int n = ws_get_tiles(w, &tiles);
@@ -868,7 +891,7 @@ static Node *ws_find_tile(Workspace *w, Window wid)
     return NULL;
 }
 
-/* Does workspace have any windows? */
+
 static int ws_has_windows(Workspace *w)
 {
     Node **tiles; int n = ws_get_tiles(w, &tiles);
@@ -877,7 +900,7 @@ static int ws_has_windows(Workspace *w)
     return 0;
 }
 
-/* Recalculate geometry from node downward. Pass NULL to start from root. */
+
 static void ws_recalc(Workspace *ws, Node *node)
 {
     if (!node) {
@@ -900,7 +923,7 @@ static void ws_recalc(Workspace *ws, Node *node)
     ws_recalc(ws, c1);
 }
 
-/* Replace old node with new_node in tree. */
+
 static void ws_replace(Workspace *ws, Node *old, Node *rep)
 {
     rep->parent = old->parent;
@@ -912,7 +935,7 @@ static void ws_replace(Workspace *ws, Node *old, Node *rep)
     }
 }
 
-/* ===== Monotonic clock ===== */
+
 
 static double mono_time(void)
 {
@@ -921,13 +944,13 @@ static double mono_time(void)
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-/* ===== X error handler ===== */
+
 
 static int xerr_handler(Display *d, XErrorEvent *e) { (void)d; (void)e; return 0; }
 static int wm_detected;
 static int xerr_detect(Display *d, XErrorEvent *e) { (void)d; (void)e; wm_detected = 1; return 0; }
 
-/* ===== WM_NAME helper ===== */
+
 
 static void get_wm_name(Window wid, char *buf, int len)
 {
@@ -949,11 +972,11 @@ static void get_wm_name(Window wid, char *buf, int len)
     snprintf(buf, len, "?");
 }
 
-/* ===== Current workspace shortcut ===== */
+
 
 static Workspace *ws(void) { return &workspaces[cur_ws]; }
 
-/* ===== Forward declarations ===== */
+
 
 static void ensure_frame(Node *tile);
 static void destroy_frame(Node *tile);
@@ -967,16 +990,16 @@ static void focus_tile(Node *tile);
 static void send_configure_notify(Window wid);
 static void bar_draw(void);
 static void bar_destroy(void);
-static void bottom_bar_init(void);
-static void bottom_bar_draw(void);
-static void bottom_bar_destroy(void);
+static void timebar_init(void);
+static void timebar_draw(void);
+static void timebar_destroy(void);
 static void unmanage_window(Window wid);
 static void cmd_init(void);
 static void cmd_cleanup(void);
 static void cmd_poll(fd_set *fds);
 void action_switch_workspace(int n);
 
-/* ===== EWMH support ===== */
+
 
 static void init_ewmh(void)
 {
@@ -984,21 +1007,21 @@ static void init_ewmh(void)
 
     ewmh_check_win = XCreateSimpleWindow(dpy, root_win, 0, 0, 1, 1, 0, 0, 0);
 
-    /* Point root and check window at each other */
+    
     XChangeProperty(dpy, root_win, supporting, XA_WINDOW, 32,
                     PropModeReplace, (unsigned char *)&ewmh_check_win, 1);
     XChangeProperty(dpy, ewmh_check_win, supporting, XA_WINDOW, 32,
                     PropModeReplace, (unsigned char *)&ewmh_check_win, 1);
 
-    /* Set WM name on both root and check window */
+    
     XChangeProperty(dpy, ewmh_check_win, a_net_wm_name, a_utf8, 8,
                     PropModeReplace, (unsigned char *)"SWM", 3);
     XChangeProperty(dpy, root_win, a_net_wm_name, a_utf8, 8,
                     PropModeReplace, (unsigned char *)"SWM", 3);
 
-    /* Do NOT map — the check window must stay hidden */
+    
 
-    /* Advertise supported EWMH features */
+    
     Atom net_supported = XInternAtom(dpy, "_NET_SUPPORTED", False);
     Atom supported[] = {
         a_net_wm_state,
@@ -1021,31 +1044,31 @@ static void cleanup_ewmh(void)
     }
 }
 
-/* ===== Fullscreen support ===== */
+
 
 static void fullscreen_enter(Window wid)
 {
-    if (ws()->fullscreen_win != None) return;   /* already fullscreened */
+    if (ws()->fullscreen_win != None) return;   
     ws()->fullscreen_win = wid;
 
-    /* Set the EWMH state property on the window */
+    
     XChangeProperty(dpy, wid, a_net_wm_state, XA_ATOM, 32,
                     PropModeReplace, (unsigned char *)&a_net_wm_state_fullscreen, 1);
 
-    /* Hide bar, tab bars, frames */
+    
     if (status_bar_win != None) XUnmapWindow(dpy, status_bar_win);
-    if (bottom_bar_win != None) XUnmapWindow(dpy, bottom_bar_win);
+    if (timebar_win != None) XUnmapWindow(dpy, timebar_win);
     Node **tiles; int n = ws_get_tiles(ws(), &tiles);
     for (int i = 0; i < n; i++) {
         if (tiles[i]->tile.tab_bar_win != None) XUnmapWindow(dpy, tiles[i]->tile.tab_bar_win);
         if (tiles[i]->tile.frame_win   != None) XUnmapWindow(dpy, tiles[i]->tile.frame_win);
-        /* Hide other client windows */
+        
         for (int j = 0; j < tiles[i]->tile.nwindows; j++)
             if (tiles[i]->tile.windows[j] != wid)
                 XUnmapWindow(dpy, tiles[i]->tile.windows[j]);
     }
 
-    /* Resize window to cover the entire screen */
+    
     XMoveResizeWindow(dpy, wid, 0, 0, (unsigned)sw, (unsigned)sh);
     XRaiseWindow(dpy, wid);
     XSetInputFocus(dpy, wid, RevertToParent, CurrentTime);
@@ -1057,25 +1080,25 @@ static void fullscreen_exit(Window wid)
     if (ws()->fullscreen_win == None || ws()->fullscreen_win != wid) return;
     ws()->fullscreen_win = None;
 
-    /* Remove the EWMH state property */
+    
     XChangeProperty(dpy, wid, a_net_wm_state, XA_ATOM, 32,
                     PropModeReplace, (unsigned char *)NULL, 0);
 
-    /* Restore bar */
+    
     if (status_bar_win != None) {
         XMapWindow(dpy, status_bar_win);
         XRaiseWindow(dpy, status_bar_win);
     }
-    if (bottom_bar_win != None) {
-        XMapWindow(dpy, bottom_bar_win);
-        XRaiseWindow(dpy, bottom_bar_win);
+    if (timebar_win != None) {
+        XMapWindow(dpy, timebar_win);
+        XRaiseWindow(dpy, timebar_win);
     }
 
-    /* Re-arrange the whole workspace — restores all tiles, frames, tab bars */
+    
     arrange_workspace(ws());
     focus_tile(ws()->active_tile);
     bar_draw();
-    bottom_bar_draw();
+    timebar_draw();
 }
 
 static void fullscreen_toggle(Window wid)
@@ -1086,7 +1109,7 @@ static void fullscreen_toggle(Window wid)
         fullscreen_enter(wid);
 }
 
-/* ===== Frame (border) management ===== */
+
 
 static void ensure_frame(Node *tile)
 {
@@ -1130,7 +1153,7 @@ static void destroy_frame(Node *tile)
     }
 }
 
-/* ===== Status bar ===== */
+
 
 static void read_cpu_raw(long *idle_out, long *total_out)
 {
@@ -1244,17 +1267,16 @@ static void bar_draw(void)
 {
     if (status_bar_win == None) return;
     int w = sw, h = cfg.statusbar_height;
-    XRaiseWindow(dpy, status_bar_win);
 
     Pixmap pm = XCreatePixmap(dpy, status_bar_win, (unsigned)w, (unsigned)h, (unsigned)depth);
 
-    /* Background */
+    
     XSetForeground(dpy, draw_gc, px(cfg.col_statusbar_bg));
     XFillRectangle(dpy, pm, draw_gc, 0, 0, (unsigned)w, (unsigned)h);
 
     int pad = 6, ws_w = 22, ws_gap = 3, text_y = h/2 + 4;
 
-    /* Left: workspace indicators */
+    
     int x = pad;
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         int is_cur = (i == cur_ws);
@@ -1275,7 +1297,7 @@ static void bar_draw(void)
         x += ws_w + ws_gap;
     }
 
-    /* Right: status text — volume and IP refreshed every 3 minutes */
+    
     cpu_pct = bar_read_cpu();
     double ram_pct = bar_read_ram();
     double now_mono = mono_time();
@@ -1302,7 +1324,7 @@ static void bar_draw(void)
     XSetFont(dpy, draw_gc, font->fid);
     XDrawString(dpy, pm, draw_gc, tx, text_y, status, (int)strlen(status));
 
-    /* Blit */
+    
     XCopyArea(dpy, pm, status_bar_win, draw_gc, 0, 0, (unsigned)w, (unsigned)h, 0, 0);
     XFreePixmap(dpy, pm);
     XFlush(dpy);
@@ -1319,7 +1341,7 @@ static void bar_handle_click(XEvent *ev)
     int x = pad;
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         if (cx >= x && cx < x + ws_w) {
-            /* action_switch_workspace(i) — forward-declared below */
+            
             action_switch_workspace(i);
             return;
         }
@@ -1336,9 +1358,9 @@ static void bar_destroy(void)
     }
 }
 
-/* ===== Bottom hex-time bar ===== */
 
-static void bottom_bar_init(void)
+
+static void timebar_init(void)
 {
     int by;
     if (cfg.timebar_pos)
@@ -1349,27 +1371,26 @@ static void bottom_bar_init(void)
     swa.background_pixel = px(cfg.col_timebar_bg);
     swa.override_redirect = True;
     swa.event_mask = ExposureMask;
-    bottom_bar_win = XCreateWindow(dpy, root_win,
+    timebar_win = XCreateWindow(dpy, root_win,
         0, by, (unsigned)sw, cfg.timebar_height, 0, depth, InputOutput, CopyFromParent,
         CWBackPixel | CWOverrideRedirect | CWEventMask, &swa);
-    XRaiseWindow(dpy, bottom_bar_win);
-    XMapWindow(dpy, bottom_bar_win);
-    bottom_bar_draw();
+    XRaiseWindow(dpy, timebar_win);
+    XMapWindow(dpy, timebar_win);
+    timebar_draw();
 }
 
-static void bottom_bar_draw(void)
+static void timebar_draw(void)
 {
-    if (bottom_bar_win == None) return;
+    if (timebar_win == None) return;
     int w = sw, h = cfg.timebar_height;
-    XRaiseWindow(dpy, bottom_bar_win);
 
-    Pixmap pm = XCreatePixmap(dpy, bottom_bar_win, (unsigned)w, (unsigned)h, (unsigned)depth);
+    Pixmap pm = XCreatePixmap(dpy, timebar_win, (unsigned)w, (unsigned)h, (unsigned)depth);
 
-    /* Background */
+    
     XSetForeground(dpy, draw_gc, px(cfg.col_timebar_bg));
     XFillRectangle(dpy, pm, draw_gc, 0, 0, (unsigned)w, (unsigned)h);
 
-    /* Get current time in local time */
+    
     time_t now_t = time(NULL);
     struct tm *tm = localtime(&now_t);
     int hours24 = tm->tm_hour;
@@ -1378,7 +1399,7 @@ static void bottom_bar_draw(void)
     int hours12 = (hours24 == 0) ? 12 : (hours24 > 12 ? hours24 - 12 : hours24);
 
     int total_secs_in_hour = minutes * 60 + seconds;
-    int hex_segment = total_secs_in_hour / 225;  /* 0-15 */
+    int hex_segment = total_secs_in_hour / 225;  
     if (hex_segment > 15) hex_segment = 15;
     double progress_in_seg = (total_secs_in_hour % 225) / 225.0;
 
@@ -1396,7 +1417,7 @@ static void bottom_bar_draw(void)
 
     int zone_w = w / 3;
 
-    /* --- Bar 1: Hour (red) --- */
+    
     {
         int x0 = 0;
         int fill_x = x0 + label_w + gap;
@@ -1419,7 +1440,7 @@ static void bottom_bar_draw(void)
         XDrawString(dpy, pm, draw_gc, x0 + 2, bar_y + bar_h - 1, lbl, (int)strlen(lbl));
     }
 
-    /* --- Bar 2: Hex minute block (green) --- */
+    
     {
         int x0 = zone_w;
         int fill_x = x0 + label_w + gap;
@@ -1441,7 +1462,7 @@ static void bottom_bar_draw(void)
         XDrawString(dpy, pm, draw_gc, x0 + 2, bar_y + bar_h - 1, lbl, 1);
     }
 
-    /* --- Bar 3: Segment progress (yellow), no label --- */
+    
     {
         int x0 = zone_w * 2;
         int fill_w = w - x0 - gap;
@@ -1457,22 +1478,22 @@ static void bottom_bar_draw(void)
         }
     }
 
-    /* Blit */
-    XCopyArea(dpy, pm, bottom_bar_win, draw_gc, 0, 0, (unsigned)w, (unsigned)h, 0, 0);
+    
+    XCopyArea(dpy, pm, timebar_win, draw_gc, 0, 0, (unsigned)w, (unsigned)h, 0, 0);
     XFreePixmap(dpy, pm);
     XFlush(dpy);
 }
 
-static void bottom_bar_destroy(void)
+static void timebar_destroy(void)
 {
-    if (bottom_bar_win != None) {
-        XUnmapWindow(dpy, bottom_bar_win);
-        XDestroyWindow(dpy, bottom_bar_win);
-        bottom_bar_win = None;
+    if (timebar_win != None) {
+        XUnmapWindow(dpy, timebar_win);
+        XDestroyWindow(dpy, timebar_win);
+        timebar_win = None;
     }
 }
 
-/* ===== Tab bar management ===== */
+
 
 static void ensure_tab_bar(Node *tile)
 {
@@ -1482,9 +1503,9 @@ static void ensure_tab_bar(Node *tile)
     int bh = cfg.tab_bar_height - b; if (bh < 1) bh = 1;
     int by;
     if (cfg.statusbar_pos)
-        by = tile->y + g + b;                              /* tab bar at top of tile */
+        by = tile->y + g + b;                              
     else
-        by = tile->y + tile->h - g - cfg.tab_bar_height;       /* tab bar at bottom of tile */
+        by = tile->y + tile->h - g - cfg.tab_bar_height;       
     int is_active = (tile == ws()->active_tile);
     const char *bar_bg = is_active ? cfg.col_border_active : cfg.col_tab_bar_bg;
 
@@ -1532,7 +1553,7 @@ static void draw_tab_bar(Node *tile)
 
     Pixmap pm = XCreatePixmap(dpy, win, (unsigned)w, (unsigned)h, (unsigned)depth);
 
-    /* Background */
+    
     XSetForeground(dpy, draw_gc, px(bar_bg));
     XFillRectangle(dpy, pm, draw_gc, 0, 0, (unsigned)w, (unsigned)h);
 
@@ -1577,13 +1598,13 @@ static void draw_tab_bar(Node *tile)
         }
     }
 
-    /* Blit */
+    
     XCopyArea(dpy, pm, win, draw_gc, 0, 0, (unsigned)w, (unsigned)h, 0, 0);
     XFreePixmap(dpy, pm);
     XFlush(dpy);
 }
 
-/* ===== Tile arrangement ===== */
+
 
 static void arrange_tile(Node *tile)
 {
@@ -1624,7 +1645,7 @@ static void hide_workspace(Workspace *w)
     }
 }
 
-/* ===== Focus ===== */
+
 
 static void focus_tile(Node *tile)
 {
@@ -1634,7 +1655,7 @@ static void focus_tile(Node *tile)
         XSetInputFocus(dpy, w, RevertToParent, CurrentTime);
         XRaiseWindow(dpy, w);
     }
-    /* Redraw all tiles for active/inactive borders & tabs */
+    
     Node **tiles; int n = ws_get_tiles(ws(), &tiles);
     for (int i = 0; i < n; i++) {
         ensure_frame(tiles[i]);
@@ -1643,7 +1664,7 @@ static void focus_tile(Node *tile)
     }
 }
 
-/* ===== Spatial navigation ===== */
+
 
 static Node *find_adjacent(const char *dir)
 {
@@ -1670,25 +1691,24 @@ static Node *find_adjacent(const char *dir)
     return best;
 }
 
-/* ===== Spawn ===== */
+
 
 static void spawn(const char *cmd)
 {
-    if (fork() == 0) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "swm: fork failed: %s\n", strerror(errno));
+        return;
+    }
+    if (pid == 0) {
         setsid();
-        /* Close the X connection fd so children can't poke the display */
+        
         if (dpy) close(ConnectionNumber(dpy));
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(1);
     }
 }
 
-/* ===== Manage / unmanage ===== */
-
-/* Check if a window should float (not be tiled).
- * Only truly ephemeral, non-interactive window types float:
- * splash screens, tooltips, notifications, popup menus, and docks.
- * Everything else (dialogs, utilities, transients) gets tiled normally. */
 static int should_float(Window wid)
 {
     Atom type; int fmt; unsigned long ni, after; unsigned char *data = NULL;
@@ -1709,7 +1729,7 @@ static int should_float(Window wid)
         XFree(data);
     } else if (data) { XFree(data); }
 
-    /* WM_TRANSIENT_FOR — window is a child dialog/popup of another window */
+    
     Window transient_for = None;
     if (XGetTransientForHint(dpy, wid, &transient_for) && transient_for != None)
         return 1;
@@ -1722,16 +1742,12 @@ static void manage_window(Window wid)
     if (managed_find(wid) >= 0) return;
     if (set_contains(tab_bars,  n_tab_bars,  wid)) return;
     if (set_contains(frame_wins, n_frame_wins, wid)) return;
-    if (wid == bottom_bar_win || wid == status_bar_win) return;
+    if (wid == timebar_win || wid == status_bar_win) return;
 
     XWindowAttributes wa;
     if (!XGetWindowAttributes(dpy, wid, &wa)) return;
     if (wa.override_redirect) return;
 
-    /* Ephemeral windows (splash, tooltip, notification, popup) — leave floating.
-     * Center on screen and raise so the user sees them (e.g. splash progress).
-     * Safe to raise because should_float only matches truly ephemeral types now,
-     * not interactive windows like dialogs or settings panels. */
     if (should_float(wid)) {
         if (wa.x <= 0 && wa.y <= 0 && wa.width < sw && wa.height < sh) {
             int nx = (sw - wa.width)  / 2;
@@ -1763,7 +1779,7 @@ static void manage_window(Window wid)
     focus_tile(tile);
     bar_draw();
 
-    /* Check if the window is already requesting fullscreen */
+    
     {
         Atom type; int fmt; unsigned long ni, after; unsigned char *data = NULL;
         if (XGetWindowProperty(dpy, wid, a_net_wm_state, 0, 32, False,
@@ -1788,16 +1804,16 @@ static void unmanage_window(Window wid)
     int ws_idx = managed[idx].ws;
     managed_del(wid);
 
-    /* If this was the fullscreen window, restore normal state */
+    
     if (workspaces[ws_idx].fullscreen_win == wid) {
         workspaces[ws_idx].fullscreen_win = None;
         if (status_bar_win != None) {
             XMapWindow(dpy, status_bar_win);
             XRaiseWindow(dpy, status_bar_win);
         }
-        if (bottom_bar_win != None) {
-            XMapWindow(dpy, bottom_bar_win);
-            XRaiseWindow(dpy, bottom_bar_win);
+        if (timebar_win != None) {
+            XMapWindow(dpy, timebar_win);
+            XRaiseWindow(dpy, timebar_win);
         }
     }
 
@@ -1811,7 +1827,7 @@ static void unmanage_window(Window wid)
     bar_draw();
 }
 
-/* ===== Actions ===== */
+
 
 void action_switch_workspace(int n)
 {
@@ -1855,7 +1871,7 @@ static void action_close_window(void)
     if (tile->tile.nwindows == 0) return;
     Window wid = tile->tile.windows[tile->tile.active_tab];
 
-    /* Try WM_DELETE_WINDOW */
+    
     Atom type; int fmt; unsigned long ni, after; unsigned char *data = NULL;
     if (XGetWindowProperty(dpy, wid, a_wm_protocols, 0, 32, False,
             XA_ATOM, &type, &fmt, &ni, &after, &data) == Success && data && ni > 0) {
@@ -1915,7 +1931,7 @@ static void action_remove_split(void)
     int idx = (parent->split.children[0] == tile) ? 0 : 1;
     Node *sibling = parent->split.children[1 - idx];
 
-    /* Collect sibling's tiles and merge windows */
+    
     Node *stiles[MAX_TILES];
     int sn = collect_tiles(sibling, stiles, MAX_TILES);
     for (int i = 0; i < sn; i++) {
@@ -2030,39 +2046,39 @@ static void action_quit(void)
     running = 0;
 }
 
-/* ===== Command socket ===== */
+
 
 static void cmd_init(void)
 {
-    /* Determine socket path: prefer $XDG_RUNTIME_DIR/swm.sock */
-    const char *path = CMD_SOCK_PATH;
-    char xdg_path[256];
+    
     const char *xdg = getenv("XDG_RUNTIME_DIR");
-    if (xdg && strlen(xdg) < sizeof(xdg_path) - 16) {
-        snprintf(xdg_path, sizeof(xdg_path), "%s/swm.sock", xdg);
-        path = xdg_path;
-    }
+    if (xdg && strlen(xdg) < sizeof(cmd_sock_path) - 16)
+        snprintf(cmd_sock_path, sizeof(cmd_sock_path), "%s/swm.sock", xdg);
+    else
+        snprintf(cmd_sock_path, sizeof(cmd_sock_path), "%s", CMD_SOCK_PATH);
 
-    unlink(path);   /* remove stale socket from previous run */
+    unlink(cmd_sock_path);
 
     cmd_listen_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (cmd_listen_fd < 0) {
         fprintf(stderr, "swm: cmd socket: %s\n", strerror(errno));
+        cmd_sock_path[0] = '\0';
         return;
     }
 
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    { size_t plen = strlen(path);
+    { size_t plen = strlen(cmd_sock_path);
       if (plen >= sizeof(addr.sun_path)) plen = sizeof(addr.sun_path) - 1;
-      memcpy(addr.sun_path, path, plen);
+      memcpy(addr.sun_path, cmd_sock_path, plen);
       addr.sun_path[plen] = '\0'; }
 
     if (bind(cmd_listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "swm: cmd bind(%s): %s\n", path, strerror(errno));
+        fprintf(stderr, "swm: cmd bind(%s): %s\n", cmd_sock_path, strerror(errno));
         close(cmd_listen_fd);
         cmd_listen_fd = -1;
+        cmd_sock_path[0] = '\0';
         return;
     }
 
@@ -2070,12 +2086,13 @@ static void cmd_init(void)
         fprintf(stderr, "swm: cmd listen: %s\n", strerror(errno));
         close(cmd_listen_fd);
         cmd_listen_fd = -1;
-        unlink(path);
+        unlink(cmd_sock_path);
+        cmd_sock_path[0] = '\0';
         return;
     }
 
     n_cmd_clients = 0;
-    fprintf(stderr, "swm: listening on %s\n", path);
+    fprintf(stderr, "swm: listening on %s\n", cmd_sock_path);
 }
 
 static void cmd_cleanup(void)
@@ -2089,14 +2106,10 @@ static void cmd_cleanup(void)
         cmd_listen_fd = -1;
     }
 
-    /* Remove socket file */
-    const char *xdg = getenv("XDG_RUNTIME_DIR");
-    if (xdg) {
-        char p[256];
-        snprintf(p, sizeof(p), "%s/swm.sock", xdg);
-        unlink(p);
+    if (cmd_sock_path[0]) {
+        unlink(cmd_sock_path);
+        cmd_sock_path[0] = '\0';
     }
-    unlink(CMD_SOCK_PATH);
 }
 
 static void cmd_drop_client(int idx)
@@ -2105,7 +2118,7 @@ static void cmd_drop_client(int idx)
     cmd_clients[idx] = cmd_clients[--n_cmd_clients];
 }
 
-/* Send a response line back to the client.  Trailing newline added. */
+
 static void cmd_reply(int fd, const char *msg)
 {
     size_t len = strlen(msg);
@@ -2113,19 +2126,19 @@ static void cmd_reply(int fd, const char *msg)
     if (len >= sizeof(buf) - 1) len = sizeof(buf) - 2;
     memcpy(buf, msg, len);
     buf[len] = '\n';
-    /* Best effort, non-blocking — don't stall the WM on a slow client. */
+    
     (void)write(fd, buf, len + 1);
 }
 
 static void cmd_dispatch(int client_fd, char *line)
 {
-    /* Strip leading/trailing whitespace */
+    
     while (*line == ' ' || *line == '\t') line++;
     char *end = line + strlen(line) - 1;
     while (end > line && (*end == ' ' || *end == '\t' || *end == '\r')) *end-- = '\0';
     if (*line == '\0') return;
 
-    /* ---- help ---- */
+    
     if (strcmp(line, "help") == 0) {
         cmd_reply(client_fd, "exec <cmd> | split h|v | split-move h|v | unsplit");
         cmd_reply(client_fd, "close | quit | reload | fullscreen");
@@ -2137,26 +2150,26 @@ static void cmd_dispatch(int client_fd, char *line)
         return;
     }
 
-    /* ---- exec <cmd> ---- */
+    
     if (strncmp(line, "exec ", 5) == 0) {
         spawn(line + 5);
         cmd_reply(client_fd, "ok");
         return;
     }
 
-    /* ---- split h / split v / split-move h / split-move v ---- */
+    
     if (strcmp(line, "split h") == 0)       { action_split(1, 0); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "split v") == 0)       { action_split(0, 0); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "split-move h") == 0)  { action_split(1, 1); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "split-move v") == 0)  { action_split(0, 1); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "unsplit") == 0)       { action_remove_split(); cmd_reply(client_fd, "ok"); return; }
 
-    /* ---- close / quit / reload ---- */
+    
     if (strcmp(line, "close") == 0) { action_close_window(); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "quit") == 0)  { cmd_reply(client_fd, "ok"); action_quit(); return; }
     if (strcmp(line, "reload") == 0) { reload_pending = 1; cmd_reply(client_fd, "ok"); return; }
 
-    /* ---- set <key> <value> — runtime config change ---- */
+    
     if (strncmp(line, "set ", 4) == 0) {
         char *kv = line + 4;
         while (*kv == ' ') kv++;
@@ -2178,30 +2191,33 @@ static void cmd_dispatch(int client_fd, char *line)
         return;
     }
 
-    /* ---- get <key> — query config value ---- */
+    
     if (strncmp(line, "get ", 4) == 0) {
         const char *key = line + 4;
         while (*key == ' ') key++;
         char r[256];
 
-        /* Integers */
-        if (strcmp(key, "tab_bar_height") == 0)      { snprintf(r, sizeof(r), "%d", cfg.tab_bar_height);      cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "border_width") == 0)         { snprintf(r, sizeof(r), "%d", cfg.border_width);        cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "border_gap") == 0)           { snprintf(r, sizeof(r), "%d", cfg.border_gap);          cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "statusbar_height") == 0)     { snprintf(r, sizeof(r), "%d", cfg.statusbar_height);    cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "statusbar_pos") == 0)        { snprintf(r, sizeof(r), "%d", cfg.statusbar_pos);       cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "timebar_pos") == 0)          { snprintf(r, sizeof(r), "%d", cfg.timebar_pos);         cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "timebar_height") == 0)       { snprintf(r, sizeof(r), "%d", cfg.timebar_height);      cmd_reply(client_fd, r); return; }
-        if (strcmp(key, "bar_update_interval") == 0)  { snprintf(r, sizeof(r), "%.2f", cfg.bar_update_interval); cmd_reply(client_fd, r); return; }
+        
+        for (int i = 0; num_map[i].name; i++) {
+            if (strcmp(key, num_map[i].name) == 0) {
+                if (num_map[i].kind == CFG_DOUBLE)
+                    snprintf(r, sizeof(r), "%.2f", *(double *)((const char *)&cfg + num_map[i].off));
+                else
+                    snprintf(r, sizeof(r), "%d", *(int *)((const char *)&cfg + num_map[i].off));
+                cmd_reply(client_fd, r);
+                return;
+            }
+        }
 
-        /* Commands */
-        if (strcmp(key, "terminal") == 0)     { cmd_reply(client_fd, cfg.terminal_cmd); return; }
-        if (strcmp(key, "file_manager") == 0) { cmd_reply(client_fd, cfg.fm_cmd);       return; }
-        if (strcmp(key, "browser") == 0)      { cmd_reply(client_fd, cfg.www_cmd);      return; }
-        if (strcmp(key, "launcher") == 0)     { cmd_reply(client_fd, cfg.launcher_cmd); return; }
-        if (strcmp(key, "reload") == 0)       { cmd_reply(client_fd, cfg.reload_cmd);   return; }
+        
+        for (int i = 0; str_map[i].name; i++) {
+            if (strcmp(key, str_map[i].name) == 0) {
+                cmd_reply(client_fd, (const char *)&cfg + str_map[i].off);
+                return;
+            }
+        }
 
-        /* Colors */
+        
         for (int i = 0; col_map[i].name; i++) {
             if (strcmp(key, col_map[i].name) == 0) {
                 cmd_reply(client_fd, (const char *)&cfg + col_map[i].off);
@@ -2213,17 +2229,17 @@ static void cmd_dispatch(int client_fd, char *line)
         return;
     }
 
-    /* ---- tab navigation ---- */
+    
     if (strcmp(line, "next-tab") == 0) { action_next_tab(); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "prev-tab") == 0) { action_prev_tab(); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "move-tab-fwd") == 0) { action_move_tab_forward(); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "move-tab-bwd") == 0) { action_move_tab_backward(); cmd_reply(client_fd, "ok"); return; }
 
-    /* ---- workspace cycling ---- */
+    
     if (strcmp(line, "next-ws") == 0) { action_next_workspace(); cmd_reply(client_fd, "ok"); return; }
     if (strcmp(line, "prev-ws") == 0) { action_prev_workspace(); cmd_reply(client_fd, "ok"); return; }
 
-    /* ---- workspace <n> / send <n> ---- */
+    
     if (strncmp(line, "workspace ", 10) == 0) {
         int n = atoi(line + 10) - 1;
         if (n >= 0 && n < NUM_WORKSPACES) {
@@ -2245,7 +2261,7 @@ static void cmd_dispatch(int client_fd, char *line)
         return;
     }
 
-    /* ---- focus <dir> / move <dir> ---- */
+    
     if (strncmp(line, "focus ", 6) == 0) {
         const char *d = line + 6;
         if (strcmp(d,"left")==0 || strcmp(d,"right")==0 || strcmp(d,"up")==0 || strcmp(d,"down")==0) {
@@ -2267,7 +2283,7 @@ static void cmd_dispatch(int client_fd, char *line)
         return;
     }
 
-    /* ---- fullscreen ---- */
+    
     if (strcmp(line, "fullscreen") == 0) {
         Node *tile = ws()->active_tile;
         if (tile->tile.nwindows > 0) {
@@ -2279,7 +2295,7 @@ static void cmd_dispatch(int client_fd, char *line)
         return;
     }
 
-    /* ---- query ---- */
+    
     if (strcmp(line, "query ws") == 0) {
         char r[16]; snprintf(r, sizeof(r), "%d", cur_ws + 1);
         cmd_reply(client_fd, r);
@@ -2311,12 +2327,12 @@ static void cmd_dispatch(int client_fd, char *line)
     cmd_reply(client_fd, "err: unknown command");
 }
 
-/* Process readable fds after select().  Also accepts new connections. */
+
 static void cmd_poll(fd_set *fds)
 {
     if (cmd_listen_fd < 0) return;
 
-    /* Accept new connections */
+    
     if (FD_ISSET(cmd_listen_fd, fds)) {
         int cfd = accept(cmd_listen_fd, NULL, NULL);
         if (cfd >= 0) {
@@ -2334,7 +2350,7 @@ static void cmd_poll(fd_set *fds)
         }
     }
 
-    /* Read from connected clients */
+    
     for (int i = 0; i < n_cmd_clients; ) {
         if (!FD_ISSET(cmd_clients[i].fd, fds)) { i++; continue; }
 
@@ -2342,10 +2358,10 @@ static void cmd_poll(fd_set *fds)
         ssize_t nr = read(cmd_clients[i].fd, tmp, sizeof(tmp));
         if (nr <= 0) {
             cmd_drop_client(i);
-            continue;  /* don't increment — swapped from tail */
+            continue;  
         }
 
-        /* Append to per-client buffer and dispatch complete lines */
+        
         for (ssize_t j = 0; j < nr; j++) {
             if (tmp[j] == '\n' || tmp[j] == '\0') {
                 cmd_clients[i].buf[cmd_clients[i].len] = '\0';
@@ -2354,13 +2370,13 @@ static void cmd_poll(fd_set *fds)
             } else if (cmd_clients[i].len < CMD_BUF_SIZE - 1) {
                 cmd_clients[i].buf[cmd_clients[i].len++] = tmp[j];
             }
-            /* else: line too long, silently truncate */
+            
         }
         i++;
     }
 }
 
-/* Populate an fd_set with the command socket fds and return the max fd. */
+
 static int cmd_fdset(fd_set *fds)
 {
     int max_fd = -1;
@@ -2374,50 +2390,55 @@ static int cmd_fdset(fd_set *fds)
     return max_fd;
 }
 
-/* ===== Config apply (after reload) ===== */
+
 
 static void cfg_apply(void)
 {
-    /* Flush color cache so new colors get allocated */
+    
+    if (n_colors > 0) {
+        unsigned long pixels[MAX_COLORS];
+        for (int i = 0; i < n_colors; i++) pixels[i] = color_cache[i].px;
+        XFreeColors(dpy, cmap, pixels, n_colors, 0);
+    }
     n_colors = 0;
 
-    /* Recalculate bar reservations */
+    
     int top_r  = (cfg.statusbar_pos  ? cfg.statusbar_height : 0) + (cfg.timebar_pos  ? cfg.timebar_height : 0);
     int bot_r  = (!cfg.statusbar_pos ? cfg.statusbar_height : 0) + (!cfg.timebar_pos ? cfg.timebar_height : 0);
     tile_y_off = top_r;
     tile_h_val = sh - top_r - bot_r;
 
-    /* Update all workspace geometry */
+    
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         workspaces[i].tile_y = tile_y_off;
         workspaces[i].tile_h = tile_h_val;
     }
 
-    /* Destroy and recreate status bar */
+    
     bar_destroy();
     if (cfg.statusbar_height > 0) bar_init();
 
-    /* Destroy and recreate bottom bar */
-    bottom_bar_destroy();
-    bottom_bar_init();
+    
+    timebar_destroy();
+    timebar_init();
 
-    /* Desktop background */
+    
     XSetWindowBackground(dpy, root_win, px(cfg.col_desktop_bg));
     XClearWindow(dpy, root_win);
 
-    /* Re-arrange current workspace */
+    
     arrange_workspace(ws());
     focus_tile(ws()->active_tile);
     if (cfg.statusbar_height > 0) bar_draw();
-    bottom_bar_draw();
+    timebar_draw();
 
-    /* Re-grab keys with (possibly new) bindings */
+    
     grab_keys();
 
     fprintf(stderr, "swm: config applied\n");
 }
 
-/* ===== Event handlers ===== */
+
 
 static void on_map_request(XEvent *ev)
 {
@@ -2425,8 +2446,6 @@ static void on_map_request(XEvent *ev)
     manage_window(wid);
 }
 
-/* Send a synthetic ConfigureNotify to tell a client its actual geometry.
- * Required by ICCCM when a WM denies or ignores a ConfigureRequest. */
 static void send_configure_notify(Window wid)
 {
     XWindowAttributes wa;
@@ -2452,7 +2471,7 @@ static void on_configure_request(XEvent *ev)
     XConfigureRequestEvent *cr = &ev->xconfigurerequest;
     Window wid = cr->window;
     if (managed_find(wid) >= 0) {
-        /* Deny the request but inform the client of its actual geometry */
+        
         send_configure_notify(wid);
         return;
     }
@@ -2483,7 +2502,7 @@ static void on_expose(XEvent *ev)
 {
     Window wid = ev->xexpose.window;
     if (status_bar_win != None && wid == status_bar_win) { bar_draw(); return; }
-    if (bottom_bar_win != None && wid == bottom_bar_win) { bottom_bar_draw(); return; }
+    if (timebar_win != None && wid == timebar_win) { timebar_draw(); return; }
     if (set_contains(tab_bars, n_tab_bars, wid)) {
         Node **tiles; int n = ws_get_tiles(ws(), &tiles);
         for (int i = 0; i < n; i++)
@@ -2495,16 +2514,16 @@ static void on_button_press(XEvent *ev)
 {
     Window wid = ev->xbutton.window;
 
-    /* Status bar */
+    
     if (status_bar_win != None && wid == status_bar_win) {
         bar_handle_click(ev);
         return;
     }
 
-    /* Bottom bar — ignore clicks */
-    if (bottom_bar_win != None && wid == bottom_bar_win) return;
+    
+    if (timebar_win != None && wid == timebar_win) return;
 
-    /* Tab bar */
+    
     if (set_contains(tab_bars, n_tab_bars, wid)) {
         Node **tiles; int n = ws_get_tiles(ws(), &tiles);
         for (int i = 0; i < n; i++) {
@@ -2531,7 +2550,7 @@ static void on_button_press(XEvent *ev)
         return;
     }
 
-    /* Managed window click */
+    
     int mi = managed_find(wid);
     if (mi >= 0 && managed[mi].ws == cur_ws) {
         Node *tile = ws_find_tile(ws(), wid);
@@ -2545,7 +2564,7 @@ static void on_button_press(XEvent *ev)
     {
         XWindowAttributes wa;
         if (XGetWindowAttributes(dpy, wid, &wa) && !wa.override_redirect &&
-            wid != root_win && wid != status_bar_win && wid != bottom_bar_win) {
+            wid != root_win && wid != status_bar_win && wid != timebar_win) {
             XRaiseWindow(dpy, wid);
             XSetInputFocus(dpy, wid, RevertToParent, CurrentTime);
         }
@@ -2568,7 +2587,7 @@ static void on_client_message(XEvent *ev)
     XClientMessageEvent *cm = &ev->xclient;
 
     if (cm->message_type == a_net_wm_state && cm->format == 32) {
-        long action = cm->data.l[0];   /* 0=remove, 1=add, 2=toggle */
+        long action = cm->data.l[0];   
         Atom prop1  = (Atom)cm->data.l[1];
         Atom prop2  = (Atom)cm->data.l[2];
 
@@ -2576,11 +2595,11 @@ static void on_client_message(XEvent *ev)
             Window wid = cm->window;
             if (managed_find(wid) < 0) return;
 
-            if (action == 2)        /* _NET_WM_STATE_TOGGLE */
+            if (action == 2)        
                 fullscreen_toggle(wid);
-            else if (action == 1)   /* _NET_WM_STATE_ADD */
+            else if (action == 1)   
                 fullscreen_enter(wid);
-            else                    /* _NET_WM_STATE_REMOVE */
+            else                    
                 fullscreen_exit(wid);
         }
     }
@@ -2598,7 +2617,7 @@ static void on_key_press(XEvent *ev)
         switch (cfg.binds[i].action) {
             case ACT_SPAWN: {
                 const char *cmd = (cfg.binds[i].sarg && cfg.binds[i].sarg[0]) ? cfg.binds[i].sarg : NULL;
-                if (!cmd) {  /* slot index in iarg */
+                if (!cmd) {  
                     switch (cfg.binds[i].iarg) {
                         case 0: cmd = cfg.terminal_cmd; break;
                         case 1: cmd = cfg.fm_cmd;       break;
@@ -2629,14 +2648,14 @@ static void on_key_press(XEvent *ev)
     }
 }
 
-/* ===== Grab keys ===== */
+
 
 static void grab_keys(void)
 {
-    /* Ungrab everything first (safe for initial call and future reload) */
+    
     XUngrabKey(dpy, AnyKey, AnyModifier, root_win);
 
-    /* NumLock/CapsLock modifier variants to grab for each binding */
+    
     unsigned lock_mods[] = { 0, Mod2Mask, LockMask, Mod2Mask | LockMask };
     int n_lock = (int)(sizeof(lock_mods) / sizeof(lock_mods[0]));
 
@@ -2648,12 +2667,12 @@ static void grab_keys(void)
                      root_win, True, GrabModeAsync, GrabModeAsync);
     }
 
-    /* Button1 on root for tab-bar clicks */
+    
     XGrabButton(dpy, Button1, AnyModifier, root_win, True,
                 ButtonPressMask, GrabModeSync, GrabModeAsync, None, None);
 }
 
-/* ===== Main ===== */
+
 
 int main(int argc, char **argv)
 {
@@ -2661,7 +2680,7 @@ int main(int argc, char **argv)
     signal(SIGCHLD, SIG_IGN);
     signal(SIGHUP,  on_sighup);
 
-    /* Load configuration: defaults, then overlay from file */
+    
     cfg_defaults();
     {
         char cfgpath[512];
@@ -2671,6 +2690,7 @@ int main(int argc, char **argv)
             else        fprintf(stderr, "swm: failed to open %s\n", cfgpath);
         }
     }
+    if (cfg.n_binds == 0) cfg_default_binds();
 
     dpy = XOpenDisplay(NULL);
     if (!dpy) { fprintf(stderr, "Cannot open display\n"); return 1; }
@@ -2683,7 +2703,7 @@ int main(int argc, char **argv)
     cmap     = DefaultColormap(dpy, scr_num);
     depth    = DefaultDepth(dpy, scr_num);
 
-    /* Bar reservation — each bar independently chooses top or bottom */
+    
     {
         int top_r  = (cfg.statusbar_pos  ? cfg.statusbar_height : 0) + (cfg.timebar_pos  ? cfg.timebar_height : 0);
         int bot_r  = (!cfg.statusbar_pos ? cfg.statusbar_height : 0) + (!cfg.timebar_pos ? cfg.timebar_height : 0);
@@ -2691,12 +2711,12 @@ int main(int argc, char **argv)
         tile_h_val = sh - top_r - bot_r;
     }
 
-    /* Font */
+    
     font = XLoadQueryFont(dpy, "-misc-fixed-medium-r-*-*-13-*-*-*-*-*-iso8859-1");
     if (!font) font = XLoadQueryFont(dpy, "fixed");
     if (!font) { fprintf(stderr, "Cannot load font\n"); XCloseDisplay(dpy); return 1; }
 
-    /* Atoms */
+    
     a_net_wm_name    = XInternAtom(dpy, "_NET_WM_NAME", False);
     a_utf8           = XInternAtom(dpy, "UTF8_STRING", False);
     a_wm_protocols   = XInternAtom(dpy, "WM_PROTOCOLS", False);
@@ -2711,10 +2731,10 @@ int main(int argc, char **argv)
     a_wm_type_notification= XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_NOTIFICATION", False);
     a_wm_type_popup_menu  = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_POPUP_MENU", False);
 
-    /* Persistent GC for all drawing */
+    
     draw_gc = XCreateGC(dpy, root_win, 0, NULL);
 
-    /* Workspaces */
+    
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         workspaces[i].sw = sw; workspaces[i].sh = sh;
         workspaces[i].tile_y = tile_y_off;
@@ -2726,14 +2746,14 @@ int main(int argc, char **argv)
     }
     cur_ws = 0;
     status_bar_win = None;
-    bottom_bar_win = None;
+    timebar_win = None;
     running = 1;
 
-    /* Desktop background */
+    
     XSetWindowBackground(dpy, root_win, px(cfg.col_desktop_bg));
     XClearWindow(dpy, root_win);
 
-    /* Check for another WM */
+    
     wm_detected = 0;
     XSetErrorHandler(xerr_detect);
     XSelectInput(dpy, root_win,
@@ -2746,19 +2766,19 @@ int main(int argc, char **argv)
     grab_keys();
     XSync(dpy, False);
 
-    /* Command socket */
+    
     cmd_init();
 
-    /* EWMH */
+    
     init_ewmh();
 
-    /* Status bar */
+    
     if (cfg.statusbar_height > 0) bar_init();
 
-    /* Bottom hex-time bar */
-    bottom_bar_init();
+    
+    timebar_init();
 
-    /* Manage existing windows */
+    
     {
         Window d1, d2, *children = NULL;
         unsigned int nchildren = 0;
@@ -2780,7 +2800,7 @@ int main(int argc, char **argv)
     int x_fd = ConnectionNumber(dpy);
 
     while (running) {
-        /* Process all queued events */
+        
         while (XPending(dpy)) {
             XEvent ev;
             XNextEvent(dpy, &ev);
@@ -2800,15 +2820,15 @@ int main(int argc, char **argv)
             }
         }
 
-        /* Periodic bar update */
+        
         double now = mono_time();
         if ((now - last_bar_update) >= cfg.bar_update_interval) {
             if (cfg.statusbar_height > 0) bar_draw();
-            bottom_bar_draw();
+            timebar_draw();
             last_bar_update = now;
         }
 
-        /* Wait for X events, command socket, or timeout */
+        
         double remaining = cfg.bar_update_interval - (mono_time() - last_bar_update);
         if (remaining < 0.05) remaining = 0.05;
         struct timeval tv;
@@ -2822,32 +2842,33 @@ int main(int argc, char **argv)
         if (cmd_max > max_fd) max_fd = cmd_max;
         select(max_fd + 1, &fds, NULL, NULL, &tv);
 
-        /* Handle command socket I/O */
+        
         cmd_poll(&fds);
 
-        /* Coalesced config apply — batched "set" commands trigger one apply */
+        
         if (apply_pending) {
             apply_pending = 0;
             cfg_apply();
         }
 
-        /* SIGHUP / socket "reload" — re-read config */
+        
         if (reload_pending) {
             reload_pending = 0;
             char cfgpath[512];
             if (cfg_resolve_path(cfgpath, sizeof(cfgpath))) {
                 cfg_defaults();
                 int n = cfg_load(cfgpath);
+                if (cfg.n_binds == 0) cfg_default_binds();
                 fprintf(stderr, "swm: reload %d settings from %s\n", n, cfgpath);
                 cfg_apply();
             }
         }
     }
 
-    /* Cleanup */
+    
     cmd_cleanup();
     bar_destroy();
-    bottom_bar_destroy();
+    timebar_destroy();
     cleanup_ewmh();
     for (int i = 0; i < NUM_WORKSPACES; i++) {
         Node **tiles; int n = ws_get_tiles(&workspaces[i], &tiles);
