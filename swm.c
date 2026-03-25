@@ -2254,6 +2254,7 @@ manage_window (Window wid)
 
   XSetWindowAttributes swa;
   swa.event_mask = StructureNotifyMask | PropertyChangeMask;
+  XSetWindowBorderWidth(dpy, wid, 0);
   XChangeWindowAttributes (dpy, wid, CWEventMask, &swa);
 
   Node *tile = ws ()->active_tile;
