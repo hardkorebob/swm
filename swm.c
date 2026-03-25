@@ -18,6 +18,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -135,7 +136,13 @@ cfg_defaults (void)
   snprintf (cfg.launcher_cmd, sizeof (cfg.launcher_cmd), "%s", "dmenu_run");
   snprintf (cfg.reload_cmd, sizeof (cfg.reload_cmd), "%s", "swmctl reload");
 
-#define SETCOL(dst, lit) memcpy ((dst), (lit), 8)
+#define SETCOL(dst, lit)                                                      \
+  do                                                                          \
+    {                                                                         \
+      _Static_assert (sizeof (lit) == 8, "color literal must be 7 chars");    \
+      memcpy ((dst), (lit), 8);                                               \
+    }                                                                         \
+  while (0)
   SETCOL (cfg.col_statusbar_bg, "#1E1E1E");
   SETCOL (cfg.col_statusbar_fg, "#FFBF00");
   SETCOL (cfg.col_statusbar_ws_active, "#fbe7ac");
@@ -562,6 +569,8 @@ static const struct
                   sizeof (((Config *)0)->reload_cmd) },
                 { NULL, 0, 0 } };
 
+static int valid_hex_color (const char *hex);
+
 static int
 cfg_set_kv (const char *key, const char *val)
 {
@@ -590,13 +599,16 @@ cfg_set_kv (const char *key, const char *val)
   if (strcmp (key, "bind") == 0)
     return cfg_parse_bind (val);
 
-  if (val[0] != '#' || strlen (val) < 7)
-    return 0;
-
   for (int i = 0; col_map[i].name; i++)
     {
       if (strcmp (key, col_map[i].name) == 0)
         {
+          if (!valid_hex_color (val))
+            {
+              fprintf (stderr, "swm: invalid color value '%s' for '%s'\n", val,
+                       key);
+              return 0;
+            }
           memcpy ((char *)&cfg + col_map[i].off, val, 7);
           ((char *)&cfg + col_map[i].off)[7] = '\0';
           return 1;
@@ -787,6 +799,34 @@ static struct
 
 static int n_cmd_clients;
 
+static int
+is_hex_digit (char c)
+{
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+         || (c >= 'A' && c <= 'F');
+}
+
+static int
+valid_hex_color (const char *hex)
+{
+  if (!hex || hex[0] != '#')
+    return 0;
+  for (int i = 1; i <= 6; i++)
+    if (!is_hex_digit (hex[i]))
+      return 0;
+  return 1;
+}
+
+static int
+hex_val (char c)
+{
+  if (c >= 'a')
+    return c - 'a' + 10;
+  if (c >= 'A')
+    return c - 'A' + 10;
+  return c - '0';
+}
+
 static unsigned long
 px (const char *hex)
 {
@@ -795,37 +835,28 @@ px (const char *hex)
     if (strcmp (color_cache[i].hex, hex) == 0)
       return color_cache[i].px;
 
+  if (!valid_hex_color (hex))
+    {
+      fprintf (stderr, "swm: px: invalid color '%s', using black\n",
+               hex ? hex : "(null)");
+      hex = "#000000";
+      for (i = 0; i < n_colors; i++)
+        if (strcmp (color_cache[i].hex, hex) == 0)
+          return color_cache[i].px;
+    }
+
   XColor c;
-  c.red = (unsigned short)(((hex[1] >= 'a'   ? hex[1] - 'a' + 10
-                             : hex[1] >= 'A' ? hex[1] - 'A' + 10
-                                             : hex[1] - '0')
-                                * 16
-                            + (hex[2] >= 'a'   ? hex[2] - 'a' + 10
-                               : hex[2] >= 'A' ? hex[2] - 'A' + 10
-                                               : hex[2] - '0'))
-                           * 256);
-  c.green = (unsigned short)(((hex[3] >= 'a'   ? hex[3] - 'a' + 10
-                               : hex[3] >= 'A' ? hex[3] - 'A' + 10
-                                               : hex[3] - '0')
-                                  * 16
-                              + (hex[4] >= 'a'   ? hex[4] - 'a' + 10
-                                 : hex[4] >= 'A' ? hex[4] - 'A' + 10
-                                                 : hex[4] - '0'))
-                             * 256);
-  c.blue = (unsigned short)(((hex[5] >= 'a'   ? hex[5] - 'a' + 10
-                              : hex[5] >= 'A' ? hex[5] - 'A' + 10
-                                              : hex[5] - '0')
-                                 * 16
-                             + (hex[6] >= 'a'   ? hex[6] - 'a' + 10
-                                : hex[6] >= 'A' ? hex[6] - 'A' + 10
-                                                : hex[6] - '0'))
-                            * 256);
+  c.red = (unsigned short)((hex_val (hex[1]) * 16 + hex_val (hex[2])) * 256);
+  c.green
+      = (unsigned short)((hex_val (hex[3]) * 16 + hex_val (hex[4])) * 256);
+  c.blue
+      = (unsigned short)((hex_val (hex[5]) * 16 + hex_val (hex[6])) * 256);
   c.flags = DoRed | DoGreen | DoBlue;
   XAllocColor (dpy, cmap, &c);
 
   if (n_colors < MAX_COLORS)
     {
-      strncpy (color_cache[n_colors].hex, hex, 7);
+      memcpy (color_cache[n_colors].hex, hex, 7);
       color_cache[n_colors].hex[7] = '\0';
       color_cache[n_colors].px = c.pixel;
       n_colors++;
@@ -1212,6 +1243,7 @@ static void arrange_tile (Node *tile);
 static void arrange_workspace (Workspace *w);
 static void hide_workspace (Workspace *w);
 static void focus_tile (Node *tile);
+static void focus_set_input (Node *tile);
 static void send_configure_notify (Window wid);
 static void bar_draw (void);
 static void bar_destroy (void);
@@ -1222,7 +1254,7 @@ static void unmanage_window (Window wid);
 static void cmd_init (void);
 static void cmd_cleanup (void);
 static void cmd_poll (fd_set *fds);
-void action_switch_workspace (int n);
+static void action_switch_workspace (int n);
 
 static void
 init_ewmh (void)
@@ -1321,7 +1353,7 @@ fullscreen_exit (Window wid)
     }
 
   arrange_workspace (ws ());
-  focus_tile (ws ()->active_tile);
+  focus_set_input (ws ()->active_tile);
   bar_draw ();
   timebar_draw ();
 }
@@ -1482,12 +1514,65 @@ bar_read_ip (char *buf, int len)
 static int
 bar_read_volume (void)
 {
-  FILE *fp = popen ("amixer get Master 2>/dev/null", "r");
-  if (!fp)
+  int pfd[2];
+  if (pipe (pfd) < 0)
     return -1;
-  char line[256];
+
+  pid_t pid = fork ();
+  if (pid < 0)
+    {
+      close (pfd[0]);
+      close (pfd[1]);
+      return -1;
+    }
+  if (pid == 0)
+    {
+      close (pfd[0]);
+      dup2 (pfd[1], STDOUT_FILENO);
+      close (pfd[1]);
+      int devnull = open ("/dev/null", O_WRONLY);
+      if (devnull >= 0)
+        {
+          dup2 (devnull, STDERR_FILENO);
+          close (devnull);
+        }
+      execl ("/usr/bin/amixer", "amixer", "get", "Master", (char *)NULL);
+      _exit (127);
+    }
+
+  close (pfd[1]);
+  fcntl (pfd[0], F_SETFL, O_NONBLOCK);
+
+  /* Read with a 200ms timeout to avoid blocking the event loop. */
+  char buf[512];
+  int total = 0;
+  struct timeval deadline;
+  deadline.tv_sec = 0;
+  deadline.tv_usec = 200000;
+
+  while (total < (int)sizeof (buf) - 1)
+    {
+      fd_set rfds;
+      FD_ZERO (&rfds);
+      FD_SET (pfd[0], &rfds);
+      int ret = select (pfd[0] + 1, &rfds, NULL, NULL, &deadline);
+      if (ret <= 0)
+        break;
+      ssize_t nr = read (pfd[0], buf + total, sizeof (buf) - 1 - (size_t)total);
+      if (nr <= 0)
+        break;
+      total += (int)nr;
+    }
+  buf[total] = '\0';
+  close (pfd[0]);
+
+  /* Reap child (non-blocking — SIGCHLD is SIG_IGN so it auto-reaps,
+     but call waitpid to be safe). */
+  waitpid (pid, NULL, WNOHANG);
+
   int vol = -1;
-  while (fgets (line, sizeof (line), fp))
+  char *line = buf;
+  while (line && *line)
     {
       char *p = strchr (line, '[');
       if (p)
@@ -1496,8 +1581,9 @@ bar_read_volume (void)
           if (q)
             vol = atoi (p + 1);
         }
+      char *nl = strchr (line, '\n');
+      line = nl ? nl + 1 : NULL;
     }
-  pclose (fp);
   return vol;
 }
 
@@ -2023,6 +2109,24 @@ focus_tile (Node *tile)
     }
 }
 
+/*
+ * Lightweight focus: set active_tile and X11 input focus only.
+ * Use after arrange_tile/arrange_workspace already drew decorations
+ * with the correct active state, and the active tile is NOT changing
+ * (so no other tile needs an active→inactive redraw).
+ */
+static void
+focus_set_input (Node *tile)
+{
+  ws ()->active_tile = tile;
+  if (tile->tile.nwindows > 0)
+    {
+      Window w = tile->tile.windows[tile->tile.active_tab];
+      XSetInputFocus (dpy, w, RevertToParent, CurrentTime);
+      XRaiseWindow (dpy, w);
+    }
+}
+
 static Node *
 find_adjacent (const char *dir)
 {
@@ -2169,7 +2273,7 @@ manage_window (Window wid)
 
   arrange_tile (tile);
   send_configure_notify (wid);
-  focus_tile (tile);
+  focus_set_input (tile);
   bar_draw ();
 
   {
@@ -2237,7 +2341,7 @@ unmanage_window (Window wid)
   bar_draw ();
 }
 
-void
+static void
 action_switch_workspace (int n)
 {
   if (n == cur_ws)
@@ -2247,7 +2351,7 @@ action_switch_workspace (int n)
   hide_workspace (ws ());
   cur_ws = n;
   arrange_workspace (ws ());
-  focus_tile (ws ()->active_tile);
+  focus_set_input (ws ()->active_tile);
   bar_draw ();
 }
 
@@ -2339,11 +2443,22 @@ action_split (int horizontal, int move_window)
 {
   Node *tile = ws ()->active_tile;
   Node *sp = node_new_split (horizontal, 0.5);
+  if (!sp)
+    {
+      fprintf (stderr, "swm: action_split: alloc split failed\n");
+      return;
+    }
   sp->x = tile->x;
   sp->y = tile->y;
   sp->w = tile->w;
   sp->h = tile->h;
   Node *sibling = node_new_tile (0, 0, 1, 1);
+  if (!sibling)
+    {
+      fprintf (stderr, "swm: action_split: alloc tile failed\n");
+      free (sp);
+      return;
+    }
 
   ws_replace (ws (), tile, sp);
   sp->split.children[0] = tile;
@@ -2414,6 +2529,8 @@ action_remove_split (void)
   ws ()->active_tile = tile;
 
   node_free_tree (sibling);
+  parent->split.children[0] = NULL;
+  parent->split.children[1] = NULL;
   free (parent);
 
   ws_invalidate_tiles (ws ());
@@ -2429,7 +2546,7 @@ action_next_tab (void)
       tile->tile.active_tab
           = (tile->tile.active_tab + 1) % tile->tile.nwindows;
       arrange_tile (tile);
-      focus_tile (tile);
+      focus_set_input (tile);
     }
 }
 
@@ -2442,7 +2559,7 @@ action_prev_tab (void)
       tile->tile.active_tab = (tile->tile.active_tab + tile->tile.nwindows - 1)
                               % tile->tile.nwindows;
       arrange_tile (tile);
-      focus_tile (tile);
+      focus_set_input (tile);
     }
 }
 
@@ -3044,7 +3161,7 @@ cfg_apply (void)
   XClearWindow (dpy, root_win);
 
   arrange_workspace (ws ());
-  focus_tile (ws ()->active_tile);
+  focus_set_input (ws ()->active_tile);
   if (cfg.statusbar_height > 0)
     bar_draw ();
   timebar_draw ();
@@ -3141,11 +3258,50 @@ static void
 on_unmap_notify (XEvent *ev)
 {
   Window wid = ev->xunmap.window;
-  if (managed_find (wid) < 0)
+  int mi = managed_find (wid);
+  if (mi < 0)
     return;
+
+  /* If XGetWindowAttributes fails, the window is gone. */
   XWindowAttributes wa;
   if (!XGetWindowAttributes (dpy, wid, &wa))
-    unmanage_window (wid);
+    {
+      unmanage_window (wid);
+      return;
+    }
+
+  /*
+   * Distinguish client-initiated unmaps (withdrawal) from WM-initiated
+   * ones (tab switching, workspace hiding, send-to-workspace, fullscreen).
+   *
+   * If the window is on the current workspace and is the active tab of its
+   * tile, the WM expects it to be mapped — so an unmap means the client
+   * withdrew itself.  In all other cases the WM caused the unmap and the
+   * window should stay managed.
+   */
+  int ws_idx = managed[mi].ws;
+  if (ws_idx == cur_ws)
+    {
+      Workspace *w = &workspaces[ws_idx];
+
+      /* If the workspace is in fullscreen and this isn't the fullscreen
+         window, the WM unmapped it — ignore. */
+      if (w->fullscreen_win != None && w->fullscreen_win != wid)
+        return;
+
+      Node *tile = ws_find_tile (w, wid);
+      if (tile)
+        {
+          int idx = tile_index (tile, wid);
+          if (idx == tile->tile.active_tab)
+            {
+              /* Window was supposed to be visible — client withdrew. */
+              unmanage_window (wid);
+            }
+          /* else: inactive tab, WM unmapped it — ignore. */
+        }
+    }
+  /* else: window is on a hidden workspace, WM unmapped it — ignore. */
 }
 
 static void
@@ -3487,6 +3643,12 @@ main (int argc, char **argv)
       workspaces[i].tile_y = tile_y_off;
       workspaces[i].tile_h = tile_h_val;
       workspaces[i].root = node_new_tile (0, tile_y_off, sw, tile_h_val);
+      if (!workspaces[i].root)
+        {
+          fprintf (stderr, "swm: workspace %d: alloc failed\n", i);
+          XCloseDisplay (dpy);
+          return 1;
+        }
       workspaces[i].active_tile = workspaces[i].root;
       workspaces[i].fullscreen_win = None;
       workspaces[i].tiles_dirty = 1;
@@ -3652,7 +3814,32 @@ main (int argc, char **argv)
           destroy_tab_bar (tiles[j]);
           destroy_frame (tiles[j]);
         }
+      node_free_tree (workspaces[i].root);
+      workspaces[i].root = NULL;
     }
+
+  for (int i = 0; i < cfg.n_binds; i++)
+    {
+      free (cfg.binds[i].sarg);
+      cfg.binds[i].sarg = NULL;
+    }
+  cfg.n_binds = 0;
+
+  if (n_colors > 0)
+    {
+      unsigned long pixels[MAX_COLORS];
+      for (int i = 0; i < n_colors; i++)
+        pixels[i] = color_cache[i].px;
+      XFreeColors (dpy, cmap, pixels, n_colors, 0);
+      n_colors = 0;
+    }
+
+  if (font)
+    {
+      XFreeFont (dpy, font);
+      font = NULL;
+    }
+
   XFreeGC (dpy, draw_gc);
   XCloseDisplay (dpy);
   return 0;
