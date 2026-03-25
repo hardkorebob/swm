@@ -703,6 +703,7 @@ typedef struct Node
       int nwindows;
       int win_cap;
       int active_tab;
+      int prev_active_tab;
       Window tab_bar_win;
       Window frame_win;
     } tile;
@@ -2259,6 +2260,7 @@ manage_window (Window wid)
 
   Node *tile = ws ()->active_tile;
   tile_add (tile, wid);
+  tile->tile.prev_active_tab = tile->tile.active_tab;
   tile->tile.active_tab = tile->tile.nwindows - 1;
   managed_add (wid, cur_ws);
 
@@ -2324,8 +2326,25 @@ unmanage_window (Window wid)
   Node *tile = ws_find_tile (w, wid);
   if (tile)
     {
+      int closed_idx = tile_index (tile, wid);
+      int was_active = (closed_idx == tile->tile.active_tab);
       tile_remove (tile, wid);
-      tile_clamp_tab (tile);
+
+      if (was_active && tile->tile.nwindows > 0)
+        {
+          int prev = tile->tile.prev_active_tab;
+          if (prev > closed_idx)
+            prev--;
+          if (prev < 0)
+            prev = 0;
+          if (prev >= tile->tile.nwindows)
+            prev = tile->tile.nwindows - 1;
+          tile->tile.active_tab = prev;
+        }
+      else
+        {
+          tile_clamp_tab (tile);
+        }
       if (ws_idx == cur_ws)
         arrange_tile (tile);
     }
