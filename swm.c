@@ -1543,7 +1543,6 @@ bar_read_volume (void)
   close (pfd[1]);
   fcntl (pfd[0], F_SETFL, O_NONBLOCK);
 
-  /* Read with a 200ms timeout to avoid blocking the event loop. */
   char buf[512];
   int total = 0;
   struct timeval deadline;
@@ -1565,9 +1564,6 @@ bar_read_volume (void)
     }
   buf[total] = '\0';
   close (pfd[0]);
-
-  /* Reap child (non-blocking — SIGCHLD is SIG_IGN so it auto-reaps,
-     but call waitpid to be safe). */
   waitpid (pid, NULL, WNOHANG);
 
   int vol = -1;
@@ -2109,12 +2105,6 @@ focus_tile (Node *tile)
     }
 }
 
-/*
- * Lightweight focus: set active_tile and X11 input focus only.
- * Use after arrange_tile/arrange_workspace already drew decorations
- * with the correct active state, and the active tile is NOT changing
- * (so no other tile needs an active→inactive redraw).
- */
 static void
 focus_set_input (Node *tile)
 {
@@ -3262,7 +3252,7 @@ on_unmap_notify (XEvent *ev)
   if (mi < 0)
     return;
 
-  /* If XGetWindowAttributes fails, the window is gone. */
+
   XWindowAttributes wa;
   if (!XGetWindowAttributes (dpy, wid, &wa))
     {
@@ -3270,22 +3260,11 @@ on_unmap_notify (XEvent *ev)
       return;
     }
 
-  /*
-   * Distinguish client-initiated unmaps (withdrawal) from WM-initiated
-   * ones (tab switching, workspace hiding, send-to-workspace, fullscreen).
-   *
-   * If the window is on the current workspace and is the active tab of its
-   * tile, the WM expects it to be mapped — so an unmap means the client
-   * withdrew itself.  In all other cases the WM caused the unmap and the
-   * window should stay managed.
-   */
   int ws_idx = managed[mi].ws;
   if (ws_idx == cur_ws)
     {
       Workspace *w = &workspaces[ws_idx];
 
-      /* If the workspace is in fullscreen and this isn't the fullscreen
-         window, the WM unmapped it — ignore. */
       if (w->fullscreen_win != None && w->fullscreen_win != wid)
         return;
 
@@ -3294,14 +3273,10 @@ on_unmap_notify (XEvent *ev)
         {
           int idx = tile_index (tile, wid);
           if (idx == tile->tile.active_tab)
-            {
-              /* Window was supposed to be visible — client withdrew. */
               unmanage_window (wid);
             }
-          /* else: inactive tab, WM unmapped it — ignore. */
         }
     }
-  /* else: window is on a hidden workspace, WM unmapped it — ignore. */
 }
 
 static void
