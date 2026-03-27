@@ -733,6 +733,7 @@ typedef struct
   Window wid;
   int ws;
 } ManagedEntry;
+
 typedef struct
 {
   char hex[8];
@@ -748,46 +749,35 @@ static int tile_y_off, tile_h_val;
 static Colormap cmap;
 static XFontStruct *font;
 static int depth;
-
 static Workspace workspaces[NUM_WORKSPACES];
 static int cur_ws;
-
 static ManagedEntry managed[MAX_MANAGED];
 static int n_managed;
-
 static Window tab_bars[MAX_SET];
 static int n_tab_bars;
 static Window frame_wins[MAX_SET];
 static int n_frame_wins;
-
 static Window status_bar_win;
 static Window timebar_win;
 static long prev_cpu_idle, prev_cpu_total;
 static double cpu_pct;
 static double last_bar_update;
 static int running;
-
 static ColorEntry color_cache[MAX_COLORS];
 static int n_colors;
-
 static Atom a_net_wm_name, a_utf8, a_wm_protocols, a_wm_delete;
 static Atom a_wm_type, a_wm_type_dock;
 static Atom a_net_wm_state, a_net_wm_state_fullscreen;
 static Atom a_wm_type_splash, a_wm_type_dialog;
 static Atom a_wm_type_tooltip, a_wm_type_notification;
 static Atom a_wm_type_popup_menu;
-
 #define CLEAN_MASK(m) ((m) & ~(Mod2Mask | LockMask))
-
 static Window ewmh_check_win;
-
 static GC draw_gc;
-
 #define BAR_INFO_INTERVAL 180.0
 static int cached_volume;
 static char cached_ip[64];
 static double last_bar_info_update;
-
 static int cmd_listen_fd = -1;
 static char cmd_sock_path[256];
 
@@ -873,12 +863,14 @@ set_contains (const Window *s, int n, Window w)
       return 1;
   return 0;
 }
+
 static void
 set_add (Window *s, int *n, Window w)
 {
   if (*n < MAX_SET && !set_contains (s, *n, w))
     s[(*n)++] = w;
 }
+
 static void
 set_remove (Window *s, int *n, Window w)
 {
@@ -898,6 +890,7 @@ managed_find (Window wid)
       return i;
   return -1;
 }
+
 static void
 managed_add (Window wid, int ws)
 {
@@ -908,6 +901,7 @@ managed_add (Window wid, int ws)
       n_managed++;
     }
 }
+
 static void
 managed_del (Window wid)
 {
@@ -915,6 +909,7 @@ managed_del (Window wid)
   if (i >= 0)
     managed[i] = managed[--n_managed];
 }
+
 static void
 managed_set_ws (Window wid, int ws)
 {
@@ -931,6 +926,7 @@ tile_has (Node *t, Window w)
       return 1;
   return 0;
 }
+
 static void
 tile_add (Node *t, Window w)
 {
@@ -949,6 +945,7 @@ tile_add (Node *t, Window w)
     }
   t->tile.windows[t->tile.nwindows++] = w;
 }
+
 static void
 tile_remove (Node *t, Window w)
 {
@@ -963,6 +960,7 @@ tile_remove (Node *t, Window w)
         }
     }
 }
+
 static int
 tile_index (Node *t, Window w)
 {
@@ -971,6 +969,7 @@ tile_index (Node *t, Window w)
       return i;
   return -1;
 }
+
 static void
 tile_clamp_tab (Node *t)
 {
@@ -1182,6 +1181,7 @@ xerr_handler (Display *d, XErrorEvent *e)
   (void)e;
   return 0;
 }
+
 static int wm_detected;
 static int
 xerr_detect (Display *d, XErrorEvent *e)
@@ -2088,14 +2088,7 @@ hide_workspace (Workspace *w)
 static void
 focus_tile (Node *tile)
 {
-  ws ()->active_tile = tile;
-  if (tile->tile.nwindows > 0)
-    {
-      Window w = tile->tile.windows[tile->tile.active_tab];
-      XSetInputFocus (dpy, w, RevertToParent, CurrentTime);
-      XRaiseWindow (dpy, w);
-    }
-
+  focus_set_input(tile);
   Node **tiles;
   int n = ws_get_tiles (ws (), &tiles);
   for (int i = 0; i < n; i++)
@@ -2374,6 +2367,7 @@ action_next_workspace (void)
 {
   action_switch_workspace ((cur_ws + 1) % NUM_WORKSPACES);
 }
+
 static void
 action_prev_workspace (void)
 {
@@ -2554,6 +2548,8 @@ action_remove_split (void)
 static void
 action_next_tab (void)
 {
+  if (ws ()->fullscreen_win != None)
+    fullscreen_exit (ws ()->fullscreen_win);
   Node *tile = ws ()->active_tile;
   if (tile->tile.nwindows > 1)
     {
@@ -2567,6 +2563,8 @@ action_next_tab (void)
 static void
 action_prev_tab (void)
 {
+  if (ws ()->fullscreen_win != None)
+    fullscreen_exit (ws ()->fullscreen_win);
   Node *tile = ws ()->active_tile;
   if (tile->tile.nwindows > 1)
     {
@@ -2614,6 +2612,7 @@ action_focus_direction (const char *dir)
   if (adj)
     {
       focus_tile (adj);
+
     }
 }
 
@@ -2638,6 +2637,7 @@ action_move_window_direction (const char *dir)
   arrange_tile (dst);
   ws ()->active_tile = dst;
   focus_tile (dst);
+
 }
 
 static void
@@ -3265,6 +3265,14 @@ on_configure_request (XEvent *ev)
 static void
 on_destroy_notify (XEvent *ev)
 {
+  Window wid = ev->xdestroywindow.window;
+  if (managed_find (wid) < 0)
+    {
+      Node *tile = ws ()->active_tile;
+      if (tile && tile->tile.nwindows > 0)
+        focus_set_input (tile);
+      return;
+    }
   unmanage_window (ev->xdestroywindow.window);
 }
 
@@ -3274,8 +3282,12 @@ on_unmap_notify (XEvent *ev)
   Window wid = ev->xunmap.window;
   int mi = managed_find (wid);
   if (mi < 0)
-    return;
-
+    {
+      Node *tile = ws ()->active_tile;
+      if (tile && tile->tile.nwindows > 0)
+        focus_set_input (tile);
+      return;
+    }
 
   XWindowAttributes wa;
   if (!XGetWindowAttributes (dpy, wid, &wa))
