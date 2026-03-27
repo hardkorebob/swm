@@ -6,10 +6,8 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -18,7 +16,6 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -759,8 +756,8 @@ static Window frame_wins[MAX_SET];
 static int n_frame_wins;
 static Window status_bar_win;
 static Window timebar_win;
-static long prev_cpu_idle, prev_cpu_total;
-static double cpu_pct;
+static Window float_wins[MAX_SET];
+static int n_float_wins;
 static double last_bar_update;
 static int running;
 static ColorEntry color_cache[MAX_COLORS];
@@ -774,10 +771,6 @@ static Atom a_wm_type_popup_menu;
 #define CLEAN_MASK(m) ((m) & ~(Mod2Mask | LockMask))
 static Window ewmh_check_win;
 static GC draw_gc;
-#define BAR_INFO_INTERVAL 180.0
-static int cached_volume;
-static char cached_ip[64];
-static double last_bar_info_update;
 static int cmd_listen_fd = -1;
 static char cmd_sock_path[256];
 
@@ -1242,6 +1235,7 @@ static void destroy_tab_bar (Node *tile);
 static void draw_tab_bar (Node *tile);
 static void arrange_tile (Node *tile);
 static void arrange_workspace (Workspace *w);
+static void raise_floats (void);
 static void hide_workspace (Workspace *w);
 static void focus_tile (Node *tile);
 static void focus_set_input (Node *tile);
@@ -1422,181 +1416,6 @@ destroy_frame (Node *tile)
 }
 
 static void
-read_cpu_raw (long *idle_out, long *total_out)
-{
-  *idle_out = 0;
-  *total_out = 0;
-  FILE *f = fopen ("/proc/stat", "r");
-  if (!f)
-    return;
-  char buf[256];
-  if (!fgets (buf, sizeof (buf), f))
-    {
-      fclose (f);
-      return;
-    }
-  fclose (f);
-  long vals[8];
-  if (sscanf (buf, "cpu %ld %ld %ld %ld %ld %ld %ld %ld", &vals[0], &vals[1],
-              &vals[2], &vals[3], &vals[4], &vals[5], &vals[6], &vals[7])
-      < 8)
-    return;
-  *idle_out = vals[3] + vals[4];
-  long total = 0;
-  for (int i = 0; i < 8; i++)
-    total += vals[i];
-  *total_out = total;
-}
-
-static double
-bar_read_cpu (void)
-{
-  long idle, total;
-  read_cpu_raw (&idle, &total);
-  long di = idle - prev_cpu_idle;
-  long dt = total - prev_cpu_total;
-  prev_cpu_idle = idle;
-  prev_cpu_total = total;
-  if (dt == 0)
-    return 0.0;
-  return 100.0 * (1.0 - (double)di / (double)dt);
-}
-
-static double
-bar_read_ram (void)
-{
-  long mem_total = 1, mem_avail = 0;
-  FILE *f = fopen ("/proc/meminfo", "r");
-  if (!f)
-    return 0.0;
-  char line[128];
-  while (fgets (line, sizeof (line), f))
-    {
-      if (strncmp (line, "MemTotal:", 9) == 0)
-        sscanf (line + 9, " %ld", &mem_total);
-      else if (strncmp (line, "MemAvailable:", 13) == 0)
-        sscanf (line + 13, " %ld", &mem_avail);
-    }
-  fclose (f);
-  if (mem_total <= 0)
-    return 0.0;
-  return 100.0 * (1.0 - (double)mem_avail / (double)mem_total);
-}
-
-static void
-bar_read_ip (char *buf, int len)
-{
-  int fd = socket (AF_INET, SOCK_DGRAM, 0);
-  if (fd < 0)
-    {
-      snprintf (buf, len, "disconnected");
-      return;
-    }
-  struct sockaddr_in addr;
-  memset (&addr, 0, sizeof (addr));
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons (80);
-  inet_pton (AF_INET, "1.1.1.1", &addr.sin_addr);
-  struct timeval tv = { 0, 100000 };
-  setsockopt (fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof (tv));
-  if (connect (fd, (struct sockaddr *)&addr, sizeof (addr)) < 0)
-    {
-      close (fd);
-      snprintf (buf, len, "disconnected");
-      return;
-    }
-  struct sockaddr_in local;
-  socklen_t slen = sizeof (local);
-  getsockname (fd, (struct sockaddr *)&local, &slen);
-  close (fd);
-  inet_ntop (AF_INET, &local.sin_addr, buf, (socklen_t)len);
-}
-
-static int
-bar_read_volume (void)
-{
-  int pfd[2];
-  if (pipe (pfd) < 0)
-    return -1;
-
-  pid_t pid = fork ();
-  if (pid < 0)
-    {
-      close (pfd[0]);
-      close (pfd[1]);
-      return -1;
-    }
-  if (pid == 0)
-    {
-      close (pfd[0]);
-      dup2 (pfd[1], STDOUT_FILENO);
-      close (pfd[1]);
-      int devnull = open ("/dev/null", O_WRONLY);
-      if (devnull >= 0)
-        {
-          dup2 (devnull, STDERR_FILENO);
-          close (devnull);
-        }
-      execl ("/usr/bin/amixer", "amixer", "get", "Master", (char *)NULL);
-      _exit (127);
-    }
-
-  close (pfd[1]);
-  fcntl (pfd[0], F_SETFL, O_NONBLOCK);
-
-  char buf[512];
-  int total = 0;
-  struct timeval deadline;
-  deadline.tv_sec = 0;
-  deadline.tv_usec = 200000;
-
-  while (total < (int)sizeof (buf) - 1)
-    {
-      fd_set rfds;
-      FD_ZERO (&rfds);
-      FD_SET (pfd[0], &rfds);
-      int ret = select (pfd[0] + 1, &rfds, NULL, NULL, &deadline);
-      if (ret <= 0)
-        break;
-      ssize_t nr = read (pfd[0], buf + total, sizeof (buf) - 1 - (size_t)total);
-      if (nr <= 0)
-        break;
-      total += (int)nr;
-    }
-  buf[total] = '\0';
-  close (pfd[0]);
-  waitpid (pid, NULL, WNOHANG);
-
-  int vol = -1;
-  char *line = buf;
-  while (line && *line)
-    {
-      char *p = strchr (line, '[');
-      if (p)
-        {
-          char *q = strstr (p, "%]");
-          if (q)
-            vol = atoi (p + 1);
-        }
-      char *nl = strchr (line, '\n');
-      line = nl ? nl + 1 : NULL;
-    }
-  return vol;
-}
-
-static void spawn (const char *cmd);
-
-static void
-bar_set_volume (int delta)
-{
-  char cmd[128];
-  snprintf (cmd, sizeof (cmd), "amixer sset Master %d%%%c >/dev/null 2>&1",
-            abs (delta), delta > 0 ? '+' : '-');
-  spawn (cmd);
-  bar_draw ();
-}
-
-static void
 bar_init (void)
 {
   int by = cfg.statusbar_pos ? 0 : (sh - cfg.statusbar_height);
@@ -1610,7 +1429,6 @@ bar_init (void)
       CWBackPixel | CWOverrideRedirect | CWEventMask, &swa);
   XRaiseWindow (dpy, status_bar_win);
   XMapWindow (dpy, status_bar_win);
-  read_cpu_raw (&prev_cpu_idle, &prev_cpu_total);
   bar_draw ();
 }
 
@@ -1663,29 +1481,10 @@ bar_draw (void)
       x += ws_w + ws_gap;
     }
 
-  cpu_pct = bar_read_cpu ();
-  double ram_pct = bar_read_ram ();
-  double now_mono = mono_time ();
-  if (now_mono - last_bar_info_update >= BAR_INFO_INTERVAL
-      || last_bar_info_update == 0)
-    {
-      cached_volume = bar_read_volume ();
-      bar_read_ip (cached_ip, sizeof (cached_ip));
-      last_bar_info_update = now_mono;
-    }
   time_t now = time (NULL);
   struct tm *tm = localtime (&now);
-  char timebuf[64];
-  strftime (timebuf, sizeof (timebuf), "%a %b %d  %H:%M", tm);
-  char vol_str[32];
-  if (cached_volume >= 0)
-    snprintf (vol_str, sizeof (vol_str), "VOL %d%%", cached_volume);
-  else
-    snprintf (vol_str, sizeof (vol_str), "VOL ?");
-
-  char status[256];
-  snprintf (status, sizeof (status), "%s   CPU %.0f%%   RAM %.0f%%   %s   %s",
-            vol_str, cpu_pct, ram_pct, cached_ip, timebuf);
+  char status[64];
+  strftime (status, sizeof (status), "%a %b %d  %H:%M", tm);
 
   int text_w = (int)strlen (status) * 7;
   int tx = w - text_w - pad;
@@ -1702,18 +1501,6 @@ bar_draw (void)
 static void
 bar_handle_click (XEvent *ev)
 {
-  int detail = ev->xbutton.button;
-  if (detail == 4)
-    {
-      bar_set_volume (5);
-      return;
-    }
-  if (detail == 5)
-    {
-      bar_set_volume (-5);
-      return;
-    }
-
   int pad = 6, ws_w = 22, ws_gap = 3;
   int cx = ev->xbutton.x;
   int x = pad;
@@ -1780,7 +1567,7 @@ timebar_draw (void)
   int hours24 = tm->tm_hour;
   int minutes = tm->tm_min;
   int seconds = tm->tm_sec;
-  int hours12 = (hours24 == 0) ? 12 : (hours24 > 12 ? hours24 - 12 : hours24);
+  //int hours12 = (hours24 == 0) ? 12 : (hours24 > 12 ? hours24 - 12 : hours24);
 
   int total_secs_in_hour = minutes * 60 + seconds;
   int hex_segment = total_secs_in_hour / 225;
@@ -1792,9 +1579,9 @@ timebar_draw (void)
   double hex_pct = total_secs_in_hour / 3600.0;
   double seg_pct = progress_in_seg;
 
-  const char *hex_chars = "0123456789ABCDEF";
+  //const char *hex_chars = "0123456789ABCDEF";
 
-  int label_w = 16;
+  //int label_w = 16;
   int gap = 2;
   int bar_y = 1;
   int bar_h = h - 2;
@@ -1805,8 +1592,10 @@ timebar_draw (void)
 
   {
     int x0 = 0;
-    int fill_x = x0 + label_w + gap;
-    int fill_w = zone_w - label_w - gap - gap;
+//    int fill_x = x0 + label_w + gap;
+//    int fill_w = zone_w - label_w - gap - gap;
+    int fill_x = x0 + gap;
+    int fill_w = zone_w - gap;
     if (fill_w < 1)
       fill_w = 1;
 
@@ -1822,18 +1611,20 @@ timebar_draw (void)
                         (unsigned)bar_h);
       }
 
-    char lbl[12];
-    snprintf (lbl, sizeof (lbl), "%d", hours12);
-    XSetForeground (dpy, draw_gc, px (cfg.col_timebar_label));
-    XSetFont (dpy, draw_gc, font->fid);
-    XDrawString (dpy, pm, draw_gc, x0 + 2, bar_y + bar_h - 1, lbl,
-                 (int)strlen (lbl));
+//    char lbl[12];
+//    snprintf (lbl, sizeof (lbl), "%d", hours12);
+//    XSetForeground (dpy, draw_gc, px (cfg.col_timebar_label));
+//    XSetFont (dpy, draw_gc, font->fid);
+//    XDrawString (dpy, pm, draw_gc, x0 + 2, bar_y + bar_h - 1, lbl,
+                 //(int)strlen (lbl));
   }
 
   {
     int x0 = zone_w;
-    int fill_x = x0 + label_w + gap;
-    int fill_w = zone_w - label_w - gap - gap;
+//    int fill_x = x0 + label_w + gap;
+//    int fill_w = zone_w - label_w - gap - gap;
+    int fill_x = x0 + gap;
+    int fill_w = zone_w - gap;
     if (fill_w < 1)
       fill_w = 1;
 
@@ -1849,10 +1640,10 @@ timebar_draw (void)
                         (unsigned)bar_h);
       }
 
-    char lbl[2] = { hex_chars[hex_segment], '\0' };
-    XSetForeground (dpy, draw_gc, px (cfg.col_timebar_label));
-    XSetFont (dpy, draw_gc, font->fid);
-    XDrawString (dpy, pm, draw_gc, x0 + 2, bar_y + bar_h - 1, lbl, 1);
+//    char lbl[2] = { hex_chars[hex_segment], '\0' };
+//    XSetForeground (dpy, draw_gc, px (cfg.col_timebar_label));
+//    XSetFont (dpy, draw_gc, font->fid);
+//    XDrawString (dpy, pm, draw_gc, x0 + 2, bar_y + bar_h - 1, lbl, 1);
   }
 
   {
@@ -2032,6 +1823,12 @@ draw_tab_bar (Node *tile)
   XFreePixmap (dpy, pm);
   XFlush (dpy);
 }
+ static void
+raise_floats (void)
+{
+  for (int i = 0; i < n_float_wins; i++)
+    XRaiseWindow (dpy, float_wins[i]);
+}
 
 static void
 arrange_tile (Node *tile)
@@ -2057,6 +1854,7 @@ arrange_tile (Node *tile)
         }
     }
   draw_tab_bar (tile);
+  raise_floats ();
 }
 
 static void
@@ -2096,6 +1894,7 @@ focus_tile (Node *tile)
       ensure_frame (tiles[i]);
       ensure_tab_bar (tiles[i]);
       draw_tab_bar (tiles[i]);
+      raise_floats ();
     }
 }
 
@@ -2109,6 +1908,7 @@ focus_set_input (Node *tile)
       XSetInputFocus (dpy, w, RevertToParent, CurrentTime);
       XRaiseWindow (dpy, w);
     }
+  raise_floats ();
 }
 
 static Node *
@@ -2129,13 +1929,13 @@ find_adjacent (const char *dir)
           ty = tiles[i]->y + tiles[i]->h / 2;
       int dx = tx - cxc, dy = ty - cyc;
       int ok = 0;
-      if (strcmp (dir, "left") == 0 && dx < -10)
+      if (strcmp (dir, "left") == 0 && dx < -5)
         ok = 1;
-      else if (strcmp (dir, "right") == 0 && dx > 10)
+      else if (strcmp (dir, "right") == 0 && dx > 5)
         ok = 1;
-      else if (strcmp (dir, "up") == 0 && dy < -10)
+      else if (strcmp (dir, "up") == 0 && dy < -5)
         ok = 1;
-      else if (strcmp (dir, "down") == 0 && dy > 10)
+      else if (strcmp (dir, "down") == 0 && dy > 5)
         ok = 1;
       if (ok)
         {
@@ -2241,6 +2041,7 @@ manage_window (Window wid)
       XSelectInput (dpy, wid, StructureNotifyMask);
       XMapWindow (dpy, wid);
       XRaiseWindow (dpy, wid);
+      set_add (float_wins, &n_float_wins, wid);
       XSetInputFocus (dpy, wid, RevertToParent, CurrentTime);
       XFlush (dpy);
       return;
@@ -2381,7 +2182,7 @@ action_send_to_workspace (int n)
     return;
   Node *tile = ws ()->active_tile;
   if (tile->tile.nwindows == 0)
-    return;
+      focus_set_input(tile);
   Window wid = tile->tile.windows[tile->tile.active_tab];
 
   tile_remove (tile, wid);
@@ -3266,6 +3067,7 @@ static void
 on_destroy_notify (XEvent *ev)
 {
   Window wid = ev->xdestroywindow.window;
+  set_remove (float_wins, &n_float_wins, wid);
   if (managed_find (wid) < 0)
     {
       Node *tile = ws ()->active_tile;
@@ -3279,7 +3081,10 @@ on_destroy_notify (XEvent *ev)
 static void
 on_unmap_notify (XEvent *ev)
 {
+  if (ev->xunmap.send_event)
+    return;
   Window wid = ev->xunmap.window;
+  set_remove (float_wins, &n_float_wins, wid);
   int mi = managed_find (wid);
   if (mi < 0)
     {
@@ -3307,11 +3112,12 @@ on_unmap_notify (XEvent *ev)
       Node *tile = ws_find_tile (w, wid);
       if (tile)
         {
+			
           int idx = tile_index (tile, wid);
           if (idx == tile->tile.active_tab)
-            {
-              unmanage_window (wid);
-            }
+           {
+            unmanage_window (wid);  
+           }
         }
     }
 }
