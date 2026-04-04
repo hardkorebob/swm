@@ -5,38 +5,44 @@
 #      or:  Mod4+r
 
 # ===== Keys ======
-bind = Mod4+e              spawn xed
-bind = Mod4+w              spawn cinnamon-control-center
+bind = F12                 spawn scrot
+bind = Mod4+g              spawn "picom --backend=glx --window-shader-fg=$HOME/.config/gray.glsl"
+bind = Mod4+Shift+g        spawn "pkill picom"
+bind = Mod4+w              spawn "xterm -e /bin/sh -c wpa"
+bind = Mod4+d              spawn evince
+bind = Mod4+o              spawn libreoffice
+bind = Mod4+a              spawn audacity
+bind = Mod4+e              spawn geany
 bind = Mod4+Return         spawn "xterm -e /bin/sh -c htop"
-bind = Mod4+c              spawn "xed ~/.config/swm/config"
 bind = Mod4+j              spawn japa
 bind = Mod4+Shift+j        spawn stopjapa
 bind = Mod4+p              spawn pbs
 bind = Mod4+s              spawn maitreya8
 bind = Mod4+k              spawn ked
-
-bind = F1                  prev_tab
-bind = F2                  next_tab
-bind = F3                  prev_ws
-bind = F4                  next_ws
+bind = Mod4+b              spawn polybar
+bind = Mod4+Shift+b        spawn "pkill polybar"
+bind = Mod4+F1             prev_tab
+bind = F1                  next_tab
+bind = Mod4+F2             prev_ws
+bind = F2                  next_ws
+bind = F3                  focus left
+bind = F4                  focus right
+bind = Mod4+F3             focus up
+bind = Mod4+F4             focus down
 bind = F6                  close
-bind = F7                  spawn launcher
-bind = F8                  spawn file_manager
-bind = F9                  spawn browser
-bind = F10                 spawn terminal
-bind = Mod4+r              spawn reload
+bind = Mod4+F6             remove_split
+bind = F7                  spawn dmenu_run
+bind = F8                  spawn thunar
+bind = F9                  spawn firefox-esr
+bind = F10                 spawn xterm
+bind = Mod4+r              spawn "swmctl reload"
 bind = Mod4+h              split_h
 bind = Mod4+v              split_v
 bind = Mod4+Shift+h        split_h_move
 bind = Mod4+Shift+v        split_v_move
-bind = Mod4+d              remove_split
 bind = Mod4+q              quit
 bind = Mod4+comma          move_tab_bwd
 bind = Mod4+period         move_tab_fwd
-bind = Mod4+F1             focus left
-bind = Mod4+F2             focus right
-bind = Mod4+F4             focus up
-bind = Mod4+F3             focus down
 bind = Mod4+Shift+F1       move_win left
 bind = Mod4+Shift+F2       move_win right
 bind = Mod4+Shift+F4       move_win up
@@ -63,27 +69,20 @@ bind = Mod4+Shift+9        send_to_ws 9
 # ===== Geometry =====
 # 0 = bottom, 1 = top
 
-tab_bar_height      = 18
+tab_bar_height      = 8
 border_width        = 1
 border_gap          = 1
 statusbar_pos       = 0        
 statusbar_height    = 18
 timebar_pos         = 1        
-timebar_height      = 12
+timebar_height      = 8
 bar_update_interval = 1.0
-
-# ===== Commands =====
-
-terminal     = xterm
-file_manager = thunar
-browser      = firefox
-launcher     = dmenu_run
 
 # ===== Colours — status bar =====
 
 col_statusbar_bg          = #1E1E1E
 col_statusbar_fg          = #FFBF00
-col_statusbar_ws_active   = #fbe7ac
+col_statusbar_ws_active   = #FCAF3E
 col_statusbar_ws_inactive = #555555
 col_statusbar_ws_occupied = #888888
 col_statusbar_ws_fg_act   = #000000
@@ -91,25 +90,25 @@ col_statusbar_ws_fg_inact = #AAAAAA
 
 # ===== Colours — tab bar =====
 
-col_tab_active_bg     = #fbe7ac
-col_tab_inactive_bg   = #3C3C3C
+col_tab_active_bg     = #FCAF3E
+col_tab_inactive_bg   = #555555
 col_tab_active_fg     = #000000
 col_tab_inactive_fg   = #AAAAAA
 col_tab_bar_bg        = #2B2B2B
-col_tab_active_bg_dim = #555555    
+col_tab_active_bg_dim = #888888    
 col_tab_active_fg_dim = #CCCCCC
 
 # ===== Colours — borders / desktop =====
 
-col_border_active   = #696969
+col_border_active   = #333333
 col_border_inactive = #1E1E1E
-col_desktop_bg      = #000000
+col_desktop_bg      = #333333
 
 # ===== Colours — bottom hex-time bar =====
 
-col_timebar_bg     = #1E1E1E
+col_timebar_bg     = #333333
 col_timebar_hour   = #CC3300
 col_timebar_hex    = #00CC66
 col_timebar_hseg   = #CCAA00
 col_timebar_label  = #FFFFFF
-col_timebar_track  = #333333
+col_timebar_track  = #222222
